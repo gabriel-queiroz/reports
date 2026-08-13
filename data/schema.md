@@ -1,9 +1,18 @@
 # iFood Benefícios - Database Schema (Completo)
-# iFood Benefícios - Database Schema (Completo)
 
 Documentação das tabelas Databricks do iFood Benefícios para geração de relatórios de IA.
 
 **Fonte**: https://ifood.atlassian.net/wiki/spaces/IFE/pages/6599770142/Tabelas+do+Databricks
+
+> **Este arquivo é a fonte da verdade única do catálogo.** Regras de domínio, partição,
+> filtro multi-tenant e relacionamento vivem aqui — não no prompt nem no código.
+>
+> ⚠️ **Não renumere nem renomeie os headings `## N. Nome`.** Eles são usados como chave
+> literal por `sql_validator.py` (`get_valid_aliases_for_domain`, `extract_fields_from_documentation`)
+> e por `tools/list_fields.py` (`DOMAIN_MARKERS`). Se o texto mudar, a extração de aliases
+> devolve vazio **em silêncio** e a validação passa a aprovar tudo.
+>
+> ⚠️ Use sempre `**Local**:` (o regex de `schema_extractor.py` não reconhece outras variações).
 
 ---
 
@@ -50,6 +59,18 @@ Isso garante que:
 **Descrição**: A tabela master de dados de funcionários da plataforma iFood Benefits. Centraliza informações de identidade e status de emprego.
 
 **Volume de dados:** ~5,22M registros | **Última atualização:** 2026-07-22
+
+**Domínio**: `colaboradores`
+
+**Multi-tenant**: não possui coluna de grupo. Exige `INNER JOIN fintech_companies.companies c ON employee.company_id = c.company_id` e filtro em `c.company_group_id`.
+
+**Partição obrigatória**: nenhuma documentada.
+
+**Filtros padrão**: `deleted = false`, `test = false`.
+
+**Relacionamentos**: `company_id` → `companies.company_id` · `id` → `ifood_benefits_recharges.employee_id`
+
+**Lacunas conhecidas**: não há data de admissão nem de desligamento. Só existe `status` (ACTIVE/INACTIVE) e `created_at`. Perguntas sobre "desligados no período X" **não têm resposta possível** neste catálogo — o agente deve dizer isso, não improvisar coluna.
 
 ### Categorias de Campos
 
@@ -98,6 +119,16 @@ Campos de controle, datas e flags técnicas.
 
 **Volume**: ~93M registros | **Última atualização**: 2026-07-22
 
+**Domínio**: `recargas`
+
+**Multi-tenant**: STRUCT embutido — filtrar direto em `company_group.id`. JOIN com `companies` é opcional.
+
+**Partição obrigatória**: nenhuma confirmada. Usar `update_month` (YYYY-MM) como filtro temporal. ⚠️ O `sql_system.md` manda particionar por `update_date`, coluna que não existe neste catálogo.
+
+**Filtros padrão**: nenhum confirmado. ⚠️ Os exemplos do prompt usam `deleted = false`, coluna não documentada aqui.
+
+**Relacionamentos**: `employee_id` → `employee.id` · `company_group.id` → `receivable_assets.company_group_id`
+
 ### Colunas Principais
 
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição |
@@ -114,6 +145,18 @@ Campos de controle, datas e flags técnicas.
 | `company` | STRUCT | `empresa` | Empresa | {id, name, cnpj} - Dados da companhia específica dentro do grupo |
 | `order_item_info` | STRUCT | `info_item_pedido` | Info do Item | Metadados do item |
 
+#### Campos de STRUCT (acessar com ponto — nunca selecionar o struct inteiro)
+
+| Coluna | Tipo | Alias PT-BR | Exibição | Descrição |
+|--------|------|-------------|----------|-----------|
+| `company_group.id` | STRING | `id_grupo` | Grupo de Empresas | UUID do grupo corporativo. **Usar no filtro multi-tenant.** |
+| `company_group.name` | STRING | `nome_grupo_empresa` | Nome do Grupo | Nome do grupo corporativo |
+| `company_group.cnpj` | STRING | `cnpj_grupo` | CNPJ do Grupo | CNPJ do grupo corporativo |
+| `company.id` | STRING | `id_empresa` | Empresa | UUID da empresa dentro do grupo |
+| `company.name` | STRING | `nome_empresa` | Nome da Empresa | Nome da empresa |
+| `company.cnpj` | STRING | `cnpj_empresa` | CNPJ da Empresa | CNPJ da empresa |
+| `order_item_info.*` | STRUCT | - | - | ⚠️ Subcampos não documentados. Confirmar no Databricks antes de usar. |
+
 
 ---
 
@@ -124,6 +167,16 @@ Campos de controle, datas e flags técnicas.
 **Descrição**: Ativos a receber (boletos, PIX e faturas) do iFood Office/Benefits. Uma linha por ativo/recebível.
 
 **Particionada por**: `asset_month` (YYYY-MM) - **OBRIGATÓRIA em WHERE**
+
+**Domínio**: `financeiro`
+
+**Multi-tenant**: coluna direta `company_group_id`. Não exige JOIN.
+
+**Filtros padrão**: `deleted = false`.
+
+**Relacionamentos**: `receivable_asset_id` → `company_tax_invoice.receivable_asset_id` · `company_group_id` ← `ifood_benefits_recharges.company_group.id`
+
+**Divergências com o prompt** (a confirmar no Databricks): o `sql_system.md` cita o status `EXPIRED` (aqui: `OVERDUE`), o tipo `STARK_PAY` (não listado) e os structs `pagar_me`, `zoop`, `metadata`, `amount_detail` (não documentados).
 
 ### Colunas Principais
 
@@ -150,11 +203,21 @@ Campos de controle, datas e flags técnicas.
 
 ## 3. Companies (Empresas)
 
-**Localização:** `fintech_companies.companies`
+**Local**: `fintech_companies.companies`
 
 **Descrição**: Master de dados cadastrais das empresas. Centraliza informações de identificação, endereços comerciais, geolocalização, grupo corporativo.
 
 **Volume**: Centenas de milhares | **Última atualização**: 2026-07-22
+
+**Domínio**: transversal — usada por todos os domínios como ponte para o filtro multi-tenant.
+
+**Multi-tenant**: coluna direta `company_group_id`.
+
+**Alias obrigatório**: quando entrar por JOIN, usar o alias `c` (exigido pelo prompt e pelo `sql_validator.py`).
+
+**Filtros padrão**: `deleted = false`. ⚠️ Os exemplos do prompt filtram `c.test = false`, coluna **não documentada** nesta tabela.
+
+**Relacionamentos**: `company_id` ← `employee.company_id`, `chargeback.company_id`, `company_tax_invoice.company_id`
 
 ### Colunas
 
@@ -179,6 +242,18 @@ Campos de controle, datas e flags técnicas.
 **Local**: `main.ifoodoffice_recharge_chargeback.chargeback`
 
 **Descrição**: Estornos (chargebacks) de recargas do iFood Office.
+
+**Domínio**: ⚠️ **conflito a resolver** — `schema_extractor.py` classifica como `recargas`; o `TABLE_RELATIONSHIPS` (`sql_validator.py`) e a descrição de domínios do agente classificam como `financeiro`. Enquanto os dois existirem, o domínio escolhido pelo LLM muda quais validações rodam.
+
+**Multi-tenant**: possui `group_id` direto (UUID do grupo). ⚠️ **conflito a resolver** — o `sql_system.md` e o `TABLE_RELATIONSHIPS` exigem JOIN com `companies`, e o `_has_valid_group_id_filter` só aceita `group_id` puro para `financial_account`/`financial_transaction`. Hoje um filtro correto `ch.group_id = '<uuid>'` é **rejeitado** pela validação.
+
+**Partição obrigatória**: nenhuma documentada. ⚠️ O `sql_system.md` manda particionar/filtrar por `updated_at`, coluna que não existe nesta tabela.
+
+**Filtros padrão**: nenhum — esta tabela não tem `deleted` nem `test`.
+
+**Relacionamentos**: `company_id` → `companies.company_id`
+
+**Divergências com o prompt** (a confirmar no Databricks): `origin` e `updated_at` são citados no `sql_system.md` mas não existem aqui; a tabela `chargeback_employee`, descrita com 9 campos no prompt, não está neste catálogo.
 
 ### Colunas Principais
 
@@ -205,6 +280,18 @@ Campos de controle, datas e flags técnicas.
 **Local**: `main.ifoodoffice_invoice_service.company_tax_invoice`
 
 **Descrição**: Notas fiscais (NF-e/NFS-e) emitidas para empresas clientes.
+
+**Domínio**: `financeiro`
+
+**Multi-tenant**: possui `group_id` direto. ⚠️ **conflito a resolver** — o `sql_system.md:116-127` e o `TABLE_RELATIONSHIPS` exigem JOIN com `companies` para esta tabela, o que é desnecessário se o `group_id` daqui for o UUID do grupo.
+
+**Partição obrigatória**: nenhuma documentada.
+
+**Filtros padrão**: `deleted = false`.
+
+**Relacionamentos**: `receivable_asset_id` → `receivable_assets.receivable_asset_id` · `company_id` → `companies.company_id`
+
+**Atenção**: `numero_titulo` é o nome **físico** da coluna (já em português) — não é alias. Usar `numero_titulo AS numero_titulo`.
 
 ### Colunas Principais
 
@@ -233,6 +320,16 @@ Campos de controle, datas e flags técnicas.
 
 **Frequência**: D-1
 
+**Domínio**: `financeiro`
+
+**Multi-tenant**: coluna direta `group_id` (atenção: **não** se chama `company_group_id`). Não exige JOIN.
+
+**Partição obrigatória**: nenhuma documentada.
+
+**Filtros padrão**: `deleted = false`, `test = false`.
+
+**Relacionamentos**: `id` ← `financial_transaction.account_id`
+
 ### Colunas Principais
 
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição |
@@ -259,6 +356,16 @@ Campos de controle, datas e flags técnicas.
 **Descrição**: Registro dos dados relativos às movimentações de valor na conta financeira da empresa cliente do iFood Benefícios (B2B). Exemplos: entradas a partir da adição de saldo para consumo em recargas futuras, entradas a partir de estornos de recarga, saídas a partir de distribuições de recargas.
 
 **Frequência**: D-1
+
+**Domínio**: `financeiro`
+
+**Multi-tenant**: não possui coluna de grupo. Exige `INNER JOIN main.ifood_benf_transaction_service.financial_account fa ON financial_transaction.account_id = fa.id` e filtro em `fa.group_id`.
+
+**Partição obrigatória**: `dt` (DATE) / `dt_partition`.
+
+**Filtros padrão**: `deleted = false`, `test = false`.
+
+**Relacionamentos**: `account_id` → `financial_account.id`
 
 ### Colunas Principais
 
@@ -312,6 +419,8 @@ financial_account ──via group_id──> (grupo corporativo)
 **Obrigatório em TODAS as queries. Escolha o método apropriado conforme a tabela:**
 
 ### Via JOIN (quando tabela não tem company_group_id embutido)
+> ⚠️ `chargeback` e `company_tax_invoice` aparecem aqui por herança do prompt antigo, mas
+> ambas possuem `group_id` próprio. Ver a seção de cada tabela — conflito ainda não resolvido.
 ```sql
 -- employee, chargeback - precisam de JOIN:
 FROM main.ifoodoffice_management.employee e
@@ -366,6 +475,27 @@ no `SELECT` (campo real da tabela, alias exato `company_group_id`).
 - **DATE**: Data (YYYY-MM-DD)
 - **TIMESTAMP**: Data e hora (ISO 8601)
 - **STRUCT**: Dados aninhados (usar `.campo` para expandir)
+
+---
+
+## ⏳ PENDÊNCIAS — a confirmar no Databricks
+
+Itens que este catálogo **não** consegue resolver sozinho. Enquanto estiverem abertos, a
+validação de colunas herda o erro deles. Cada um vira uma correção no `sql_system.md`, no
+`sql_validator.py` ou aqui — nunca uma invenção do LLM.
+
+| # | Pendência | Impacto se ficar aberto |
+|---|-----------|-------------------------|
+| 1 | `employee` tem coluna de admissão/desligamento? O prompt cita `hire_date` e `termination_date`. | Pergunta comum ("desligados em julho") sem resposta possível → LLM inventa coluna |
+| 2 | `employee`: existem `employee_id`, `employee_name`, `person_id`? O prompt afirma que sim. | Prompt ensina 5 colunas que este catálogo não tem |
+| 3 | `ifood_benefits_recharges`: existe `deleted`? Qual é a partição real (`update_month`? `update_date`?) | Filtro obrigatório do prompt pode não existir; partição errada = full scan |
+| 4 | `ifood_benefits_recharges`: existem `order_item_id`, `order_status`, struct `order_info`? | Prompt descreve struct `order_info`; catálogo só tem `order_item_info` |
+| 5 | `chargeback`: o `group_id` é o UUID do grupo (mesmo de `company_group_id`)? Existem `origin` e `updated_at`? | Decide se JOIN com `companies` é necessário e se a validação atual está rejeitando query correta |
+| 6 | `company_tax_invoice`: o `group_id` é o UUID do grupo? | Mesmo caso do item 5 |
+| 7 | Existe a tabela `chargeback_employee`? E `mv_employee_config`, `anticipation`, `anticipation_receivable`? | Citadas no prompt e no código, ausentes do catálogo |
+| 8 | `companies` tem `test`? | Exemplo canônico do prompt usa `c.test = false` |
+| 9 | `receivable_assets`: status `EXPIRED` ou `OVERDUE`? Tipo `STARK_PAY` existe? Structs `pagar_me`/`zoop`/`metadata`/`amount_detail`? | Enum errado = relatório vazio silencioso |
+| 10 | Os campos `_hash` de `employee` devem ser oferecidos ao usuário? Hoje aparecem como "Nome", "CPF", "Email" e entregam SHA-256. | Usuário pede "Nome, CPF, Email" e recebe CSV de hashes |
 
 ---
 
