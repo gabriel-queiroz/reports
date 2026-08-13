@@ -31,7 +31,7 @@ SELECT
 FROM main.ifoodoffice_management.employee e
 INNER JOIN fintech_companies.companies c ON e.company_id = c.company_id
 WHERE e.deleted = false
-  AND c.company_group_id = '{group_id}'
+  AND c.company_group_id = '<uuid-do-grupo>'
 ```
 
 **⚠️ IMPORTANTE**: Os nomes entre `SELECT ... FROM` (id, name_hash, email_hash, created_at) são os nomes reais das colunas na tabela. Os nomes após `AS` (id_colaborador, nome, email, data_criacao) são os aliases em português que aparecem no resultado final.
@@ -461,21 +461,21 @@ financial_account.group_id       ──> (grupo corporativo)
 -- employee - unica tabela que precisa de JOIN com companies:
 FROM main.ifoodoffice_management.employee e
 INNER JOIN fintech_companies.companies c ON e.company_id = c.company_id
-WHERE c.company_group_id = '{group_id}'
+WHERE c.company_group_id = '<uuid-do-grupo>'
 ```
 
 ### Via STRUCT (quando company_group está embutido na tabela)
 ```sql
 -- ifood_benefits_recharges - tem company_group STRUCT:
 FROM main.fintech_finance.ifood_benefits_recharges
-WHERE company_group.id = '{group_id}'  -- ← Acesso direto ao STRUCT
+WHERE company_group.id = '<uuid-do-grupo>'  -- ← Acesso direto ao STRUCT
 ```
 
 ### Via Coluna Direta (quando company_group_id é coluna normal)
 ```sql
 -- receivable_assets - tem company_group_id como coluna:
 FROM main.fintech_finance.receivable_assets
-WHERE company_group_id = '{group_id}'
+WHERE company_group_id = '<uuid-do-grupo>'
 ```
 
 ### Via Coluna Direta `group_id` (financial_account, chargeback, company_tax_invoice)
@@ -483,13 +483,13 @@ WHERE company_group_id = '{group_id}'
 -- financial_account, chargeback e company_tax_invoice tem group_id como coluna normal.
 -- Confirmado: o group_id destas tabelas e o mesmo UUID de companies.company_group_id.
 FROM main.ifood_benf_transaction_service.financial_account
-WHERE group_id = '{group_id}'
+WHERE group_id = '<uuid-do-grupo>'
 
 FROM main.ifoodoffice_recharge_chargeback.chargeback
-WHERE group_id = '{group_id}'
+WHERE group_id = '<uuid-do-grupo>'
 
 FROM main.ifoodoffice_invoice_service.company_tax_invoice
-WHERE group_id = '{group_id}'
+WHERE group_id = '<uuid-do-grupo>'
 ```
 
 ### Via JOIN com financial_account (financial_transaction)
@@ -498,7 +498,7 @@ WHERE group_id = '{group_id}'
 FROM main.ifood_benf_transaction_service.financial_transaction ft
 INNER JOIN main.ifood_benf_transaction_service.financial_account fa
   ON ft.account_id = fa.id
-WHERE fa.group_id = '{group_id}'
+WHERE fa.group_id = '<uuid-do-grupo>'
 ```
 
 Além do filtro, toda query deve incluir o `company_group_id` como coluna de saída
