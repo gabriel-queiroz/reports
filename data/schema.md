@@ -77,7 +77,9 @@ original tinha mais tabelas). **São chave literal para o código — não renum
 
 **Relacionamentos**: `company_id` → `companies.company_id` · `id` → `ifood_benefits_recharges.employee_id`
 
-**Lacunas conhecidas**: não há data de admissão nem de desligamento. Só existe `status` (ACTIVE/INACTIVE) e `created_at`. Perguntas sobre "desligados no período X" **não têm resposta possível** neste catálogo — o agente deve dizer isso, não improvisar coluna.
+**Colunas que NÃO existem** (confirmado): `employee_id`, `employee_name`, `person_id`, `hire_date`, `termination_date`. O `sql_system.md` as listava como "campos principais" — é invenção do prompt. Os equivalentes reais são `id` e `name_hash`.
+
+**Lacunas conhecidas** (confirmado): não há data de admissão nem de desligamento. Só existe `status` (ACTIVE/INACTIVE) e `created_at` (data de criação do registro, **não** de admissão). Perguntas do tipo "desligados em julho" **não têm resposta possível** neste catálogo — o agente deve dizer isso ao usuário, não improvisar coluna nem usar `created_at` como substituto.
 
 ### Categorias de Campos
 
@@ -550,16 +552,21 @@ validação de colunas herda o erro deles. Cada um vira uma correção no `sql_s
 
 | # | Pendência | Impacto se ficar aberto |
 |---|-----------|-------------------------|
-| 1 | `employee` tem coluna de admissão/desligamento? O prompt cita `hire_date` e `termination_date`. | Pergunta comum ("desligados em julho") sem resposta possível → LLM inventa coluna |
-| 2 | `employee`: existem `employee_id`, `employee_name`, `person_id`? O prompt afirma que sim. | Prompt ensina 5 colunas que este catálogo não tem |
-| 3 | `ifood_benefits_recharges`: existe `deleted`? Qual é a partição real (`update_month`? `update_date`?) | Filtro obrigatório do prompt pode não existir; partição errada = full scan |
-| 4 | `ifood_benefits_recharges`: existem `order_item_id`, `order_status`, struct `order_info`? | Prompt descreve struct `order_info`; catálogo só tem `order_item_info` |
-| 5 | `chargeback`: o `group_id` é o UUID do grupo (mesmo de `company_group_id`)? Existem `origin` e `updated_at`? | Decide se JOIN com `companies` é necessário e se a validação atual está rejeitando query correta |
-| 6 | `company_tax_invoice`: o `group_id` é o UUID do grupo? | Mesmo caso do item 5 |
-| 7 | Existe a tabela `chargeback_employee`? E `mv_employee_config`, `anticipation`, `anticipation_receivable`? | Citadas no prompt e no código, ausentes do catálogo |
-| 8 | `companies` tem `test`? | Exemplo canônico do prompt usa `c.test = false` |
-| 9 | `receivable_assets`: status `EXPIRED` ou `OVERDUE`? Tipo `STARK_PAY` existe? Structs `pagar_me`/`zoop`/`metadata`/`amount_detail`? | Enum errado = relatório vazio silencioso |
-| 10 | Os campos `_hash` de `employee` devem ser oferecidos ao usuário? Hoje aparecem como "Nome", "CPF", "Email" e entregam SHA-256. | Usuário pede "Nome, CPF, Email" e recebe CSV de hashes |
+| 1 | `ifood_benefits_recharges`: existe `deleted`? Qual é a partição real (`update_month`? `update_date`?) | Filtro obrigatório do prompt pode não existir; partição errada = full scan |
+| 2 | `ifood_benefits_recharges`: existem `order_item_id`, `order_status`, struct `order_info`? | Prompt descreve struct `order_info`; catálogo só tem `order_item_info` |
+| 3 | `chargeback`: o `group_id` é o UUID do grupo (mesmo de `company_group_id`)? Existem `origin` e `updated_at`? | Decide se JOIN com `companies` é necessário e se a validação atual está rejeitando query correta |
+| 4 | `company_tax_invoice`: o `group_id` é o UUID do grupo? | Mesmo caso do item 3 |
+| 5 | Existe a tabela `chargeback_employee`? E `mv_employee_config`, `anticipation`, `anticipation_receivable`? | Citadas no prompt e no código, ausentes do catálogo |
+| 6 | `companies` tem `test`? | Exemplo canônico do prompt usa `c.test = false` |
+| 7 | `receivable_assets`: status `EXPIRED` ou `OVERDUE`? Tipo `STARK_PAY` existe? Structs `pagar_me`/`zoop`/`metadata`/`amount_detail`? | Enum errado = relatório vazio silencioso |
+| 8 | Os campos `_hash` de `employee` devem ser oferecidos ao usuário? Hoje aparecem como "Nome", "CPF", "Email" e entregam SHA-256. | Usuário pede "Nome, CPF, Email" e recebe CSV de hashes |
+
+### Resolvidas
+
+| Pendência | Resolução |
+|-----------|-----------|
+| `employee` tem `hire_date`/`termination_date`? | **Não existem.** Não há data de admissão nem desligamento. Registrado na seção 7. |
+| `employee` tem `employee_id`/`employee_name`/`person_id`? | **Não existem.** São `id` e `name_hash`. Invenção do prompt, removida do `sql_system.md`. |
 
 ---
 
