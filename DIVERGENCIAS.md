@@ -8,64 +8,7 @@ daqui — está aplicado no `schema.md` e registrado nos commits.
 
 ---
 
-## 1. ⏸ Caminho da `companies` — mudança acoplada a código
-
-| | |
-|---|---|
-| `schema.md`, prompts e código | `fintech_companies.companies` |
-| Databricks | `main.fintech_companies.companies` |
-
-As outras seis tabelas usam `main.` corretamente; só a `companies` não.
-
-**Testado:** trocar o catálogo para o caminho completo faz o `validate_mandatory_joins`
-**rejeitar toda query de colaboradores** — os padrões casam `JOIN FINTECH_COMPANIES.COMPANIES`
-e não reconhecem o `main.` no meio. Schema e código têm que mudar no mesmo deploy (ver seção 4).
-
-Se o warehouse resolve o catálogo padrão como `main`, hoje funciona por acidente feliz.
-
----
-
-## 2. Enums documentados no Databricks e ausentes do schema
-
-Valores válidos para filtro. Sem eles, o modelo inventa o valor do `WHERE` — e enum errado
-devolve relatório vazio sem erro nenhum.
-
-| Tabela | Coluna | Valores | Já no schema? |
-|---|---|---|---|
-| `companies` | `card_delivery_type` | `PAP` (individual), `LOTE` (em lote) | parcial |
-| `companies` | `origin` | `SALESFORCE`, `SELFSALES` (entre outros) | ✅ |
-| `recharges` | `voucher_group` | `PAT`, `LIVRE` | ✅ |
-| `recharges` | `order_status` | `DISTRIBUTION_COMPLETE` (legado `DISTRIBUTED` mapeado) | não |
-| `recharges` | `product_key` | `FOOD_VOUCHER`, `MEAL_VOUCHER` (entre outros) | parcial |
-| `receivable_assets` | `status` | `PENDING`, `RECEIVED`, `CANCELED`, `EXPIRED` | ✅ |
-| `receivable_assets` | `type` | `INVOICED_BOLETO`, `BOLETO`, `PIX`, `STARK_PAY` | ✅ |
-| `receivable_assets` | `product_type` | `MEAL_VOUCHER`, `MOBILITY_VOUCHER`, `EDUCATION_VOUCHER`, `CULTURE_VOUCHER` (entre outros) | parcial |
-| `company_tax_invoice` | `tax_invoice_status` | `AVAILABLE`, `PENDING` | parcial |
-| `company_tax_invoice` | `product_type` | `REWARD_VOUCHER`, `MEAL_VOUCHER`, `MOBILITY_VOUCHER`, `CARD_ISSUE` | não |
-| `financial_account` | `origin` | `COMPANY` | não |
-| `financial_account` | `type` | `MAIN` | não |
-| `financial_account` | `product_type` | `MEAL_VOUCHER`, `MOBILITY_VOUCHER`, `CULTURE_VOUCHER` | não |
-| `financial_transaction` | `type` | `CREDIT`, `DEBIT` | não |
-| `financial_transaction` | `rubric` | `DISTRIBUTION`, `BILLING_PAID`, `DISTRIBUTION_WALLET` | não |
-| `financial_transaction` | `amount_currency` | `BRL` | não |
-
----
-
-## 3. Subcampos de struct documentados pela metade
-
-### `ifood_benefits_recharges.order_info`
-O schema documenta 5 subcampos, com **aliases e tipos propostos por mim, não confirmados**.
-O Databricks lista 19: `order_id`, `created_at`, `created_by`, `updated_by`, `order_status`,
-`company_group_id`, `distributed`, `distribute_on`, `payment_method`, `type`, `scheduled`,
-`authorization_id`, `balance_usage`, `custom_description`, `pre_eligible`, `source_system`,
-`bko_action`, `deleted`, `test`.
-
-Dois pontos que mudam decisão:
-- **`order_info.company_group_id` existe** — é um segundo caminho de filtro multi-tenant nessa
-  tabela, além de `company_group.id`. Definir qual é o canônico.
-- **`order_info.deleted` e `order_info.test` existem.** A tabela não tem `deleted` no topo (isso
-  segue verdade), mas tem dentro do struct. Se o filtro de soft delete for necessário, o caminho
-  é `order_info.deleted = false`.
+## 1. Subcampos de struct documentados pela metade
 
 ### `ifood_benefits_recharges.order_item_info`
 O schema marca como "subcampos não documentados". O Databricks lista 8: `created_at`,
@@ -78,7 +21,7 @@ O schema marca como "subcampos não documentados". O Databricks lista 8: `create
 
 ---
 
-## 4. Correções de código
+## 2. Correções de código
 
 Não dependem de confirmação de ninguém — são consequência do que já foi decidido.
 
@@ -91,11 +34,10 @@ Não dependem de confirmação de ninguém — são consequência do que já foi
 | `schema_extractor.py:10,17` | Remover `mv_employee_config` e `anticipation` do `TABLE_TO_DOMAIN` — confirmado que não existem |
 | `sql_validator.py:139` | Remover `mv_employee_config` de `TABLE_RELATIONSHIPS["colaboradores"]["tables"]` pelo mesmo motivo |
 | `sql_validator.py:563-579` e `tools/list_fields.py:19-27` | Quando `chargeback_employee` for confirmada, incluir `"## 8. Chargeback Employee"` nos mapas de domínio — sem isso os aliases dela não são validados |
-| `sql_validator.py:287-300`, `:341`, `:170`, `schema_extractor.py:70-74` | **Caminho da `companies`** (seção 1): aceitar o prefixo `main.` em `companies_patterns`, no regex de `_extract_companies_table_alias`, em `TABLE_RELATIONSHIPS["company_filter_table"]` e no append hardcoded do `schema_extractor` |
 
 ---
 
-## 5. Pendências que só o Databricks responde
+## 3. Pendências que só o Databricks responde
 
 | # | Pendência | Impacto se ficar aberto |
 |---|-----------|-------------------------|

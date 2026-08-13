@@ -61,6 +61,12 @@ ser corrigido depois.
    use outra coluna como substituto** — gere a query com o que existe e deixe de fora o
    que não existe.
 
+   ⚠️ **VALORES.** Quando a coluna "Valores" estiver preenchida, ela lista os valores
+   válidos daquele campo. Filtre apenas por esses valores, exatamente como escritos —
+   **nunca invente valor de enum**. Valor inexistente não dá erro: devolve relatório
+   vazio, e o usuário não tem como perceber. Se a pergunta citar um estado que não está
+   na lista, use o valor equivalente da lista ou deixe o filtro de fora.
+
 8. **SAÍDA EM CSV.** Selecione apenas colunas planas, com aliases legíveis. Nunca
    selecione um STRUCT inteiro — acesse o campo aninhado com ponto
    (ex.: `company_group.name AS nome_grupo_empresa`).
