@@ -136,13 +136,13 @@ GROUP_ID_FIELD_MAPPING = {
 # filtrar por company_group_id
 TABLE_RELATIONSHIPS = {
     "colaboradores": {
-        "tables": ["employee", "mv_employee_config"],
+        "tables": ["employee"],
         "company_filter_table": "fintech_companies.companies",
         "join_field": "company_id",
         "has_embedded_company_group": False,
         "description": (
-            "Tabelas employee/mv_employee_config têm company_id "
-            "mas NÃO têm company_group_id - requerem JOIN com companies"
+            "A tabela employee tem company_id mas NÃO tem company_group_id - "
+            "requer JOIN com companies"
         ),
     },
     "recargas": {
@@ -156,8 +156,15 @@ TABLE_RELATIONSHIPS = {
         ),
     },
     "financeiro": {
-        "tables": ["company_tax_invoice", "chargeback"],
-        "tables_with_direct_group_id": ["receivable_assets", "financial_account"],
+        # Nenhuma tabela do domínio exige JOIN com companies: chargeback e
+        # company_tax_invoice têm group_id próprio (confirmado no catálogo).
+        "tables": [],
+        "tables_with_direct_group_id": [
+            "receivable_assets",
+            "financial_account",
+            "chargeback",
+            "company_tax_invoice",
+        ],
         "tables_with_custom_group_join": {
             "financial_transaction": {
                 "join_table_key": "financial_account",
@@ -171,14 +178,22 @@ TABLE_RELATIONSHIPS = {
         "join_field": "company_id",
         "has_embedded_company_group": False,
         "description": (
-            "Tabelas company_tax_invoice e chargeback têm company_id "
-            "mas NÃO têm company_group_id - requerem JOIN com companies. "
-            "receivable_assets tem company_group_id direto; financial_account "
-            "tem group_id direto; financial_transaction requer JOIN com "
-            "financial_account."
+            "receivable_assets tem company_group_id direto; financial_account, "
+            "chargeback e company_tax_invoice têm group_id direto (é o UUID do "
+            "grupo); financial_transaction requer JOIN com financial_account."
         ),
     },
 }
+
+
+# Tabelas cuja coluna `group_id` É o UUID do grupo de empresas — confirmado no
+# catálogo. Nelas o filtro multi-tenant é direto, sem JOIN com companies.
+TABLES_WITH_DIRECT_GROUP_ID = (
+    "financial_account",
+    "financial_transaction",
+    "chargeback",
+    "company_tax_invoice",
+)
 
 
 def _references_table(sql: str, table_name: str) -> bool:
@@ -358,10 +373,9 @@ def _has_valid_group_id_filter(sql: str, group_id: str) -> bool:
     ):
         return True
 
-    # group_id é válido apenas para tabelas do serviço financeiro de conta/transação
-    if (
-        _references_table(sql, "financial_account")
-        or _references_table(sql, "financial_transaction")
+    # `group_id` puro só vale para as tabelas cujo group_id É o UUID do grupo
+    if any(
+        _references_table(sql, table) for table in TABLES_WITH_DIRECT_GROUP_ID
     ) and re.search(
         rf"\b(?:[\w\.]+\.)?group_id\s*=\s*'{re.escape(group_id)}'",
         sql,
@@ -386,7 +400,13 @@ def _financeiro_group_filter_clause(sql: str, group_id: str) -> str:
         # receivable_assets tem company_group_id direto
         return f"company_group_id = '{group_id}'"
 
-    # company_tax_invoice e chargeback: filtro via JOIN com companies
+    if _references_table(sql, "chargeback") or _references_table(
+        sql, "company_tax_invoice"
+    ):
+        # ambas têm group_id direto — o group_id delas é o UUID do grupo
+        return f"group_id = '{group_id}'"
+
+    # fallback: filtro via JOIN com companies
     actual_alias = _extract_companies_table_alias(sql)
     return f"{actual_alias}.company_group_id = '{group_id}'"
 

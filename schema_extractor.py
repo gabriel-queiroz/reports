@@ -7,14 +7,14 @@ from typing import Dict, List
 # Mapeamento de nomes de tabelas no schema para domínios
 TABLE_TO_DOMAIN = {
     "employee": "colaboradores",
-    "mv_employee_config": "colaboradores",
     "ifood_benefits_recharges": "recargas",
-    "chargeback": "recargas",
+    # chargeback é financeiro (estornos), alinhado ao TABLE_RELATIONSHIPS do
+    # sql_validator e à descrição de domínios do agente
+    "chargeback": "financeiro",
     "company_tax_invoice": "financeiro",
     "receivable_assets": "financeiro",
     "financial_account": "financeiro",
     "financial_transaction": "financeiro",
-    "anticipation": "financeiro",
 }
 
 
