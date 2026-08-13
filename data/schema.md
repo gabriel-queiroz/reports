@@ -205,7 +205,7 @@ Campos de controle, datas e flags técnicas.
 
 **Enums**: o dump do Databricks lista `status` como `PENDING, RECEIVED, CANCELED, EXPIRED`. `OVERDUE` está documentado aqui como possível valor legado — ao filtrar por vencidos, considerar os dois. `STARK_PAY` é tipo válido.
 
-**Divergência restante**: os structs `pagar_me`, `zoop`, `metadata` e `amount_detail`, citados no prompt antigo, seguem não documentados. Foram removidos do prompt até alguém confirmar.
+**Colunas disponíveis**: exatamente as listadas abaixo — nenhuma outra.
 
 ### Colunas Principais
 
@@ -625,7 +625,6 @@ validação de colunas herda o erro deles. Cada um vira uma correção no `sql_s
 | 2 | `ifood_benefits_recharges`: quais os tipos e subcampos reais de `order_info` e `order_item_info`? | Aliases e tipos de `order_info.*` foram propostos, não confirmados |
 | 3 | `chargeback_employee`: caminho completo, colunas reais, tipos e estratégia multi-tenant | Tabela documentada por inferência — **não liberar para o agente** até confirmar |
 | 4 | `chargeback_employee`: `employee_name` e `tax_id` são dados em claro? | Muda o tratamento de LGPD do CSV entregue |
-| 5 | `receivable_assets`: os structs `pagar_me`, `zoop`, `metadata`, `amount_detail` existem? | Foram removidos do prompt; se existirem, o agente perde acesso a eles |
 
 ### Correções de código decorrentes das pendências já resolvidas
 

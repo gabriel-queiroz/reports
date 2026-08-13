@@ -269,7 +269,7 @@ O schema marca como "subcampos não documentados". O Databricks lista 8:
 | 1.2 `employee.person_id` | **Remover toda menção.** Não entra no catálogo e saiu da lista de colunas inexistentes. Removida também a linha `person_id` da seção 8 (`chargeback_employee`). | ✅ |
 | 1.3 `companies.test` | **Manter como está.** A coluna existe, mas não é documentada nem usada como filtro padrão. A afirmação falsa de que "não existe" foi corrigida. | ✅ |
 | 1.4 `receivable_assets.status` | **Documentar os dois.** `EXPIRED` como valor do dump, `OVERDUE` como possível legado. | ✅ |
-| 1.5 structs de `receivable_assets` | pendente | |
+| 1.5 structs de `receivable_assets` | **Fora de escopo.** `pagar_me`, `zoop`, `metadata` e `amount_detail` existem, mas não entram no catálogo. Seguindo o critério do 1.1, o schema não os menciona — nem para dizer que não devem ser usados. | ✅ |
 | 2.x colunas faltantes (43) | pendente | |
 | 3 colunas só no schema (8) | pendente | |
 | 4 caminho da `companies` (`main.`) | pendente | |
