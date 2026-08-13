@@ -26,7 +26,7 @@ SELECT
   e.id AS id_colaborador,
   e.name_hash AS nome,
   e.email_hash AS email,
-  e.created_at AS data_criacao,
+  e.created_at AS data_criacao_colaborador,
   c.company_group_id AS company_group_id
 FROM main.ifoodoffice_management.employee e
 INNER JOIN fintech_companies.companies c ON e.company_id = c.company_id
@@ -34,7 +34,7 @@ WHERE e.deleted = false
   AND c.company_group_id = '<uuid-do-grupo>'
 ```
 
-**⚠️ IMPORTANTE**: Os nomes entre `SELECT ... FROM` (id, name_hash, email_hash, created_at) são os nomes reais das colunas na tabela. Os nomes após `AS` (id_colaborador, nome, email, data_criacao) são os aliases em português que aparecem no resultado final.
+**⚠️ IMPORTANTE**: Os nomes entre `SELECT ... FROM` (id, name_hash, email_hash, created_at) são os nomes reais das colunas na tabela. Os nomes após `AS` (id_colaborador, nome, email, data_criacao_colaborador) são os aliases em português que aparecem no resultado final.
 
 Isso garante que:
 - Os relatórios sejam entregues completamente em português
@@ -112,18 +112,18 @@ Campos que indicam o estado atual do colaborador no sistema.
 
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição | Uso |
 |--------|------|-------------|----------|-----------|-----|
-| `status` | STRING | `situacao` | Situação | Status do colaborador: **ACTIVE** (ativo) ou **INACTIVE** (desligado/removido). Use para filtrar ativos vs. inativos. | ✅ Essencial |
-| `company_id` | STRING | `id_empresa` | Empresa | UUID da empresa/subsidiária onde o colaborador trabalha. **Obrigatório para filtros multi-tenant.** | ✅ Essencial |
+| `status` | STRING | `situacao_colaborador` | Situação | Status do colaborador: **ACTIVE** (ativo) ou **INACTIVE** (desligado/removido). Use para filtrar ativos vs. inativos. | ✅ Essencial |
+| `company_id` | STRING | `id_empresa_colaborador` | Empresa | UUID da empresa/subsidiária onde o colaborador trabalha. **Obrigatório para filtros multi-tenant.** | ✅ Essencial |
 
 #### 🔍 Metadata e Auditoria
 Campos de controle, datas e flags técnicas.
 
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição | Uso |
 |--------|------|-------------|----------|-----------|-----|
-| `deleted` | BOOLEAN | `deletado` | Deletado | Flag de soft delete. `true` = registro marcado como deletado (lógico, não físico). Sempre filtrar `deleted = false`. | ✅ Filtro |
-| `test` | BOOLEAN | `teste` | Teste | Flag indicando dados de teste. `true` = registro de teste, `false` = produção. Filtrar conforme necessário. | Teste |
+| `deleted` | BOOLEAN | `deletado_colaborador` | Deletado | Flag de soft delete. `true` = registro marcado como deletado (lógico, não físico). Sempre filtrar `deleted = false`. | ✅ Filtro |
+| `test` | BOOLEAN | `teste_colaborador` | Teste | Flag indicando dados de teste. `true` = registro de teste, `false` = produção. Filtrar conforme necessário. | Teste |
 | `test_mode` | STRING | `modo_teste` | Modo de Teste | Modo de teste técnico (valor informacional). Ignorar em relatórios de produção. | Ignorar |
-| `created_at` | STRING | `data_criacao` | Data de Criação | Timestamp ISO 8601 de quando o colaborador foi criado no sistema. | Auditoria |
+| `created_at` | STRING | `data_criacao_colaborador` | Data de Criação | Timestamp ISO 8601 de quando o colaborador foi criado no sistema. | Auditoria |
 
 ---
 
@@ -154,11 +154,11 @@ Campos de controle, datas e flags técnicas.
 | `product_key` | STRING | `chave_produto` | Produto | FOOD_VOUCHER, MEAL_VOUCHER, MOBILITY_VOUCHER... |
 | `order_status` | STRING | `situacao_pedido` | Situação do Pedido | Status no nível do pedido |
 | `order_item_status` | STRING | `situacao_item_pedido` | Situação do Item | CREATED, DISTRIBUTION_COMPLETE |
-| `amount` | DOUBLE | `valor` | Valor | Valor da recarga (R$) |
+| `amount` | DOUBLE | `valor_recarga` | Valor | Valor da recarga (R$) |
 | `cashback_amount` | DOUBLE | `valor_cashback` | Cashback | Valor do cashback (R$) |
-| `employee_id` | STRING | `id_colaborador` | Colaborador | ID do funcionário |
+| `employee_id` | STRING | `id_colaborador_recarga` | Colaborador | ID do funcionário |
 | `update_month` | STRING | `mes_atualizacao` | Mês de Atualização | Mês da atualização (YYYY-MM) |
-| `update_date` | STRING | `data_atualizacao` | Data de Atualização | **Coluna de partição** — filtrar sempre que possível. Tipo/formato a confirmar |
+| `update_date` | STRING | `data_atualizacao_recarga` | Data de Atualização | **Coluna de partição** — filtrar sempre que possível. Tipo/formato a confirmar |
 | `schedule_date` | STRING | `data_agendamento` | Data de Agendamento | Data agendada (YYYY-MM-DD) |
 | `company_group` | STRUCT | `grupo_empresa` | Grupo de Empresas | {id, name, cnpj} - Dados do grupo corporativo. **Usar para filtrar por group_id diretamente!** |
 | `company` | STRUCT | `empresa` | Empresa | {id, name, cnpj} - Dados da companhia específica dentro do grupo |
@@ -168,12 +168,12 @@ Campos de controle, datas e flags técnicas.
 
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição |
 |--------|------|-------------|----------|-----------|
-| `company_group.id` | STRING | `id_grupo` | Grupo de Empresas | UUID do grupo corporativo. **Usar no filtro multi-tenant.** |
-| `company_group.name` | STRING | `nome_grupo_empresa` | Nome do Grupo | Nome do grupo corporativo |
+| `company_group.id` | STRING | `id_grupo_recarga` | Grupo de Empresas | UUID do grupo corporativo. **Usar no filtro multi-tenant.** |
+| `company_group.name` | STRING | `nome_grupo_empresa_recarga` | Nome do Grupo | Nome do grupo corporativo |
 | `company_group.cnpj` | STRING | `cnpj_grupo` | CNPJ do Grupo | CNPJ do grupo corporativo |
-| `company.id` | STRING | `id_empresa` | Empresa | UUID da empresa dentro do grupo |
-| `company.name` | STRING | `nome_empresa` | Nome da Empresa | Nome da empresa |
-| `company.cnpj` | STRING | `cnpj_empresa` | CNPJ da Empresa | CNPJ da empresa |
+| `company.id` | STRING | `id_empresa_recarga` | Empresa | UUID da empresa dentro do grupo |
+| `company.name` | STRING | `nome_empresa_recarga` | Nome da Empresa | Nome da empresa |
+| `company.cnpj` | STRING | `cnpj_empresa_recarga` | CNPJ da Empresa | CNPJ da empresa |
 | `order_info.payment_method` | STRING | `forma_pagamento` | Forma de Pagamento | Meio de pagamento do pedido |
 | `order_info.balance_usage` | STRING | `uso_saldo` | Uso de Saldo | Indicação de uso de saldo na recarga |
 | `order_info.custom_description` | STRING | `descricao_personalizada` | Descrição | Descrição livre informada no pedido |
@@ -212,20 +212,20 @@ Campos de controle, datas e flags técnicas.
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição |
 |--------|------|-------------|----------|-----------|
 | `receivable_asset_id` | STRING | `id_ativo_recebivel` | Ativo Recebível | UUID único do ativo |
-| `type` | STRING | `tipo` | Tipo | BOLETO, INVOICED_BOLETO, PIX, STARK_PAY |
-| `status` | STRING | `situacao` | Situação | PENDING, RECEIVED, CANCELED, EXPIRED (`OVERDUE` pode aparecer em registros legados) |
-| `product_type` | STRING | `tipo_produto` | Tipo de Produto | MEAL_VOUCHER, MOBILITY, CULTURE, etc. |
+| `type` | STRING | `tipo_recebivel` | Tipo | BOLETO, INVOICED_BOLETO, PIX, STARK_PAY |
+| `status` | STRING | `situacao_recebivel` | Situação | PENDING, RECEIVED, CANCELED, EXPIRED (`OVERDUE` pode aparecer em registros legados) |
+| `product_type` | STRING | `tipo_produto_recebivel` | Tipo de Produto | MEAL_VOUCHER, MOBILITY, CULTURE, etc. |
 | `company_group_id` | STRING | `company_group_id` | Grupo de Empresas | ID do grupo corporativo |
-| `amount` | DOUBLE | `valor` | Valor | Valor principal (R$) |
+| `amount` | DOUBLE | `valor_recebivel` | Valor | Valor principal (R$) |
 | `interest_amount` | DOUBLE | `valor_juros` | Juros | Valor de juros (R$) |
 | `iof_tax_amount` | DOUBLE | `valor_iof` | IOF | Valor de IOF (R$) |
 | `due_date` | STRING | `data_vencimento` | Data de Vencimento | Data de vencimento (YYYY-MM-DD) |
 | `paid_at` | TIMESTAMP | `data_pagamento` | Data de Pagamento | Timestamp do pagamento |
-| `created_at` | TIMESTAMP | `data_criacao` | Data de Criação | Timestamp de criação |
+| `created_at` | TIMESTAMP | `data_criacao_recebivel` | Data de Criação | Timestamp de criação |
 | `invoice_internal_number` | STRING | `numero_interno_fatura` | Número Interno | Número interno da fatura |
 | `invoice_external_number` | STRING | `numero_externo_fatura` | Número Externo | Número externo da fatura |
-| `external_id` | STRING | `id_externo` | ID Externo | ID externo |
-| `deleted` | BOOLEAN | `deletado` | Deletado | Soft delete |
+| `external_id` | STRING | `id_externo_recebivel` | ID Externo | ID externo |
+| `deleted` | BOOLEAN | `deletado_recebivel` | Deletado | Soft delete |
 
 
 ---
@@ -261,7 +261,7 @@ Campos de controle, datas e flags técnicas.
 | `card_delivery_type` | STRING | `tipo_entrega_cartao` | Tipo de Entrega | LOTE ou outro |
 | `is_cardless` | BOOLEAN | `sem_cartao` | Sem Cartão | Operação digital |
 | `commercial_address` | STRUCT | `endereco_comercial` | Endereço Comercial | Endereço comercial |
-| `deleted` | BOOLEAN | `deletado` | Deletado | Soft delete |
+| `deleted` | BOOLEAN | `deletado_empresa` | Deletado | Soft delete |
 
 
 ---
@@ -370,17 +370,17 @@ Campos de controle, datas e flags técnicas.
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição |
 |--------|------|-------------|----------|-----------|
 | `id` | STRING | `id_nota_fiscal` | Nota Fiscal (ID) | UUID da nota |
-| `company_id` | STRING | `id_empresa` | Empresa | UUID da empresa |
-| `company_cnpj` | STRING | `cnpj_empresa` | CNPJ | CNPJ (14 dígitos) |
-| `group_id` | STRING | `id_grupo` | Grupo | UUID do grupo |
-| `receivable_asset_id` | STRING | `id_ativo_recebivel` | Ativo Recebível | FK para receivable_assets |
+| `company_id` | STRING | `id_empresa_nota` | Empresa | UUID da empresa |
+| `company_cnpj` | STRING | `cnpj_empresa_nota` | CNPJ | CNPJ (14 dígitos) |
+| `group_id` | STRING | `id_grupo_nota` | Grupo | UUID do grupo |
+| `receivable_asset_id` | STRING | `id_ativo_recebivel_nota` | Ativo Recebível | FK para receivable_assets |
 | `numero_titulo` | STRING | `numero_titulo` | Número do Título | Número do título/boleto |
 | `tax_invoice_status` | STRING | `situacao_nota_fiscal` | Situação | PENDING, AVAILABLE |
 | `tax_invoice_url` | STRING | `url_nota_fiscal` | URL | URL para download |
-| `product_type` | STRING | `tipo_produto` | Tipo de Produto | Tipo de produto |
-| `amount` | DOUBLE | `valor` | Valor | Valor em R$ |
-| `deleted` | BOOLEAN | `deletado` | Deletado | Soft delete |
-| `created_at` | STRING | `data_criacao` | Data de Criação | Criação |
+| `product_type` | STRING | `tipo_produto_nota` | Tipo de Produto | Tipo de produto |
+| `amount` | DOUBLE | `valor_nota` | Valor | Valor em R$ |
+| `deleted` | BOOLEAN | `deletado_nota` | Deletado | Soft delete |
+| `created_at` | STRING | `data_criacao_nota` | Data de Criação | Criação |
 
 ---
 
@@ -406,18 +406,18 @@ Campos de controle, datas e flags técnicas.
 
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição |
 |--------|------|-------------|----------|-----------|
-| `id` | STRING | `id_conta_financeira` | Conta Financeira (ID) | UUID único da conta financeira da empresa cliente. Chave primária. |
-| `group_id` | STRING | `id_grupo` | Grupo | UUID do grupo corporativo da empresa. **Usar para filtros multi-tenant.** |
-| `product_type` | STRING | `tipo_produto` | Tipo de Produto | Produto ao qual a conta está vinculada (MEAL_VOUCHER, FOOD_VOUCHER, MOBILITY_VOUCHER, etc.). |
-| `type` | STRING | `tipo` | Tipo | Tipo da conta financeira. |
+| `id` | STRING | `id_conta_financeira_conta` | Conta Financeira (ID) | UUID único da conta financeira da empresa cliente. Chave primária. |
+| `group_id` | STRING | `id_grupo_conta` | Grupo | UUID do grupo corporativo da empresa. **Usar para filtros multi-tenant.** |
+| `product_type` | STRING | `tipo_produto_conta` | Tipo de Produto | Produto ao qual a conta está vinculada (MEAL_VOUCHER, FOOD_VOUCHER, MOBILITY_VOUCHER, etc.). |
+| `type` | STRING | `tipo_conta` | Tipo | Tipo da conta financeira. |
 | `origin` | STRING | `origem` | Origem | Origem de criação da conta financeira. |
-| `test` | BOOLEAN | `teste` | Teste | Flag de dados de teste. `true` = teste, `false` = produção. |
-| `deleted` | BOOLEAN | `deletado` | Deletado | Soft delete. Filtrar `deleted = false`. |
-| `created_at` | STRING | `data_criacao` | Data de Criação | Timestamp ISO 8601 de criação da conta. |
-| `updated_at` | STRING | `data_atualizacao` | Data de Atualização | Timestamp ISO 8601 da última atualização da conta. |
-| `_origin_time` | STRING | `tempo_origem` | Tempo de Origem | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
-| `_processing_time` | STRING | `tempo_processamento` | Tempo de Processamento | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
-| `_timeid` | STRING | `timeid` | Time ID | Metadado técnico de particionamento. Normalmente ignorado em relatórios. |
+| `test` | BOOLEAN | `teste_conta` | Teste | Flag de dados de teste. `true` = teste, `false` = produção. |
+| `deleted` | BOOLEAN | `deletado_conta` | Deletado | Soft delete. Filtrar `deleted = false`. |
+| `created_at` | STRING | `data_criacao_conta` | Data de Criação | Timestamp ISO 8601 de criação da conta. |
+| `updated_at` | STRING | `data_atualizacao_conta` | Data de Atualização | Timestamp ISO 8601 da última atualização da conta. |
+| `_origin_time` | STRING | `tempo_origem_conta` | Tempo de Origem | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
+| `_processing_time` | STRING | `tempo_processamento_conta` | Tempo de Processamento | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
+| `_timeid` | STRING | `timeid_conta` | Time ID | Metadado técnico de particionamento. Normalmente ignorado em relatórios. |
 
 ---
 
@@ -444,26 +444,26 @@ Campos de controle, datas e flags técnicas.
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição |
 |--------|------|-------------|----------|-----------|
 | `id` | STRING | `id_transacao_financeira` | Transação Financeira (ID) | UUID único da movimentação. Chave primária. |
-| `account_id` | STRING | `id_conta_financeira` | Conta Financeira | FK para `financial_account.id`. |
-| `amount` | DOUBLE | `valor` | Valor | Valor da movimentação (R$). |
+| `account_id` | STRING | `id_conta_financeira_transacao` | Conta Financeira | FK para `financial_account.id`. |
+| `amount` | DOUBLE | `valor_transacao` | Valor | Valor da movimentação (R$). |
 | `amount_currency` | STRING | `moeda_valor` | Moeda | Moeda do valor (ex.: BRL). |
 | `authorization_id` | STRING | `id_autorizacao` | Autorização | ID da autorização associada à movimentação. |
-| `type` | STRING | `tipo` | Tipo | Tipo da movimentação (entrada, saída, estorno, etc.). |
+| `type` | STRING | `tipo_transacao` | Tipo | Tipo da movimentação (entrada, saída, estorno, etc.). |
 | `rubric` | STRING | `rubrica` | Rubrica | Rubrica/classificação contábil da movimentação. |
 | `justification` | STRING | `justificativa` | Justificativa | Justificativa/descrição da movimentação. |
 | `transaction_date` | STRING | `data_transacao` | Data da Transação | Data da movimentação (YYYY-MM-DD). |
-| `external_id` | STRING | `id_externo` | ID Externo | ID externo da movimentação. |
+| `external_id` | STRING | `id_externo_transacao` | ID Externo | ID externo da movimentação. |
 | `idempotence_id` | STRING | `id_idempotencia` | ID de Idempotência | Chave de idempotência da movimentação. |
 | `is_synced` | BOOLEAN | `sincronizado` | Sincronizado | Indica se a movimentação foi sincronizada com sistemas externos. |
-| `test` | BOOLEAN | `teste` | Teste | Flag de dados de teste. `true` = teste, `false` = produção. |
-| `deleted` | BOOLEAN | `deletado` | Deletado | Soft delete. Filtrar `deleted = false`. |
-| `created_at` | STRING | `data_criacao` | Data de Criação | Timestamp ISO 8601 de criação. |
-| `updated_at` | STRING | `data_atualizacao` | Data de Atualização | Timestamp ISO 8601 da última atualização. |
+| `test` | BOOLEAN | `teste_transacao` | Teste | Flag de dados de teste. `true` = teste, `false` = produção. |
+| `deleted` | BOOLEAN | `deletado_transacao` | Deletado | Soft delete. Filtrar `deleted = false`. |
+| `created_at` | STRING | `data_criacao_transacao` | Data de Criação | Timestamp ISO 8601 de criação. |
+| `updated_at` | STRING | `data_atualizacao_transacao` | Data de Atualização | Timestamp ISO 8601 da última atualização. |
 | `dt` | DATE | `data` | Data | Data de particionamento (YYYY-MM-DD). |
 | `dt_partition` | STRING | `particao_data` | Partição de Data | Partição da tabela. |
-| `_origin_time` | STRING | `tempo_origem` | Tempo de Origem | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
-| `_processing_time` | STRING | `tempo_processamento` | Tempo de Processamento | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
-| `_timeid` | STRING | `timeid` | Time ID | Metadado técnico de particionamento. Normalmente ignorado em relatórios. |
+| `_origin_time` | STRING | `tempo_origem_transacao` | Tempo de Origem | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
+| `_processing_time` | STRING | `tempo_processamento_transacao` | Tempo de Processamento | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
+| `_timeid` | STRING | `timeid_transacao` | Time ID | Metadado técnico de particionamento. Normalmente ignorado em relatórios. |
 
 ---
 
@@ -563,53 +563,6 @@ no `SELECT` (campo real da tabela, alias exato `company_group_id`).
 - **DATE**: Data (YYYY-MM-DD)
 - **TIMESTAMP**: Data e hora (ISO 8601)
 - **STRUCT**: Dados aninhados (usar `.campo` para expandir)
-
----
-
-## ⚠️ ARMADILHAS DO CATÁLOGO
-
-Divergências reais entre tabelas deste mesmo arquivo. Não são erros de digitação — são
-o que o catálogo é hoje, e cada uma já causou ou causa query errada.
-
-### 1. O mesmo conceito de data tem tipo diferente conforme a tabela
-
-| Coluna | Tabela | Tipo | Formato |
-|--------|--------|------|---------|
-| `created_at` | employee, chargeback, company_tax_invoice, financial_account, financial_transaction | STRING | ISO 8601 |
-| `created_at` | **receivable_assets** | **TIMESTAMP** | — |
-| `paid_at` | receivable_assets | TIMESTAMP | — |
-| `due_date` | receivable_assets | STRING | YYYY-MM-DD |
-| `update_month` | ifood_benefits_recharges | STRING | **YYYY-MM** |
-| `schedule_date` | ifood_benefits_recharges | STRING | YYYY-MM-DD |
-| `transaction_date` | financial_transaction | STRING | YYYY-MM-DD |
-| `dt` | financial_transaction | DATE | YYYY-MM-DD |
-
-Filtrar período numa coluna STRING é **comparação de texto**: funciona por ser ISO, mas só
-se o filtro usar o mesmo comprimento de string. `update_month` é YYYY-MM — comparar com
-`'2026-07-01'` não faz o que parece.
-
-### 2. Aliases PT-BR repetidos em tabelas diferentes
-
-| Alias | Aponta para |
-|-------|-------------|
-| `id_conta_financeira` | `financial_account.id` **e** `financial_transaction.account_id` (colunas distintas) |
-| `id_empresa` | `company_id` (employee, chargeback, company_tax_invoice) e `company.id` (recargas) |
-| `id_grupo` | `group_id` (chargeback, company_tax_invoice, financial_account) e `company_group.id` (recargas) |
-| `valor` | `amount` em recargas, receivable_assets, company_tax_invoice, financial_transaction |
-| `tipo` | `type` em receivable_assets, financial_account, financial_transaction |
-| `situacao` | `status` em employee e em receivable_assets |
-| `data_criacao` | `created_at` em cinco tabelas |
-
-Em query com JOIN, dois campos com o mesmo alias produzem **colunas duplicadas no CSV**.
-Ao cruzar tabelas, desambiguar no alias (ex.: `valor_recarga`, `valor_nota`).
-
-### 3. Quatro aliases são idênticos ao nome físico da coluna
-
-`company_group_id`, `cnpj`, `login`, `numero_titulo`.
-
-Contradizem a regra do topo deste arquivo ("o que vem depois do `AS` é o nome em português")
-e são a causa dos falsos positivos do `validate_alias_misuse`, que hoje reprova query
-correta que filtre por `c.cnpj` ou agrupe por `c.company_group_id`.
 
 ---
 

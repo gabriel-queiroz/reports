@@ -4,7 +4,7 @@
 
 🇧🇷 **REGRA 1: SEMPRE USE ALIASES EM PORTUGUÊS BRASILEIRO**
 Consulte a seção "Aliases PT-BR" em schema.md. Todos os campos devem ter aliases
-legíveis em português (ex: id_colaborador, nome_empresa, data_criacao).
+legíveis em português (ex: id_colaborador, nome_empresa, valor_recarga).
 
 📋 **REGRA 1B: AO EXIBIR CAMPOS DISPONÍVEIS PARA O USUÁRIO, USE A COLUNA "Exibição"**
 Quando o usuário solicitar uma lista de campos disponíveis, use a coluna "Exibição"
@@ -65,7 +65,7 @@ EXEMPLOS CORRETOS:
     AND ra.company_group_id = '{group_id}'
 
   -- OPÇÃO 3C: Direto em financial_account (group_id)
-  SELECT fa.id AS id_conta_financeira,
+  SELECT fa.id AS id_conta_financeira_conta,
          fa.group_id AS company_group_id
   FROM main.ifood_benf_transaction_service.financial_account fa
   WHERE fa.deleted = false

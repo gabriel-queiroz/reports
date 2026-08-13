@@ -276,6 +276,10 @@ O schema marca como "subcampos não documentados". O Databricks lista 8:
 | 5 `group_id` nulo em notas fiscais | pendente | |
 | 6 enums ausentes (19) | pendente | |
 | 7 subcampos de struct | pendente | |
+| Armadilha "tipos de data divergentes" | **Virou regra.** Nova regra 5 do `sql_system.md` manda filtrar conforme o Tipo declarado, com o caso do `update_month` (YYYY-MM) e o do `created_at` que muda de tipo entre tabelas. | ✅ |
+| Armadilha "aliases repetidos" | **Resolvida no catálogo.** 51 aliases renomeados com sufixo da entidade — nenhum alias se repete entre tabelas. `company_group_id` preservado nas 2 ocorrências por ser o alias de saída obrigatório. | ✅ |
+| Armadilha "alias igual à coluna física" | **Não é problema de catálogo.** `company_group_id` tem que ser esse alias por contrato; a correção é no `validate_alias_misuse`, já listada nas correções de código. | ✅ |
+| Seção ARMADILHAS | **Removida do schema** (2.361 chars). Não descrevia dado — era nota de processo indo para o prompt a cada chamada. | ✅ |
 
 ---
 

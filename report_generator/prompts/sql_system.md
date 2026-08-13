@@ -32,7 +32,7 @@ ser corrigido depois.
    ⚠️ **Em WHERE / JOIN / GROUP BY / ORDER BY use sempre a coluna real, nunca o alias:**
    - ❌ `WHERE ft.data_transacao >= '2026-05-13'`
    - ✅ `WHERE ft.transaction_date >= '2026-05-13'`
-   - ❌ `ON ft.id_conta_financeira = fa.id`
+   - ❌ `ON ft.id_conta_financeira_transacao = fa.id`
    - ✅ `ON ft.account_id = fa.id`
 
    Alguns aliases coincidem com o nome físico (`cnpj`, `login`, `company_group_id`,
@@ -45,21 +45,29 @@ ser corrigido depois.
    Nem toda tabela tem `deleted` ou `test` — filtrar por uma coluna que não existe quebra
    a query. Confirme na lista de colunas antes de usar.
 
-5. **TABELAS.** Use somente as tabelas listadas em <tabelas> e documentadas em
+5. **DATAS.** Filtre conforme o **Tipo** declarado para a coluna em <documentacao_tabelas>:
+   - Coluna `STRING` guarda data como texto ISO — compare com string do **mesmo formato**.
+     `update_month` é `YYYY-MM`: comparar com `'2026-07-01'` não funciona, use `'2026-07'`.
+   - Coluna `TIMESTAMP` ou `DATE` aceita comparação de data normalmente.
+   - A mesma ideia de campo pode ter tipo diferente em cada tabela (ex.: `created_at` é
+     `STRING` em quase todas e `TIMESTAMP` em `receivable_assets`). Sempre confira o Tipo
+     da tabela que você está consultando, nunca assuma pelo nome da coluna.
+
+6. **TABELAS.** Use somente as tabelas listadas em <tabelas> e documentadas em
    <documentacao_tabelas>. Não invente tabela, schema ou catálogo.
 
-6. **CAMPOS.** Todo campo usado deve existir na coluna "Coluna" da tabela em questão.
+7. **CAMPOS.** Todo campo usado deve existir na coluna "Coluna" da tabela em questão.
    Se a pergunta pedir um dado que não existe no catálogo, **não improvise coluna e não
    use outra coluna como substituto** — gere a query com o que existe e deixe de fora o
    que não existe.
 
-7. **SAÍDA EM CSV.** Selecione apenas colunas planas, com aliases legíveis. Nunca
+8. **SAÍDA EM CSV.** Selecione apenas colunas planas, com aliases legíveis. Nunca
    selecione um STRUCT inteiro — acesse o campo aninhado com ponto
    (ex.: `company_group.name AS nome_grupo_empresa`).
 
-8. **LIMIT.** Inclua `LIMIT {max_rows}` ao final.
+9. **LIMIT.** Inclua `LIMIT {max_rows}` ao final.
 
-9. **MULTI-TENANT (OBRIGATÓRIO EM 100% DAS QUERIES).**
+10. **MULTI-TENANT (OBRIGATÓRIO EM 100% DAS QUERIES).**
    {restricao_group_id}
 
    Cada tabela declara como filtrar no seu bloco **Multi-tenant** em <documentacao_tabelas>.
@@ -90,7 +98,7 @@ ser corrigido depois.
 
    Exemplo com coluna direta:
    ```sql
-   SELECT fa.id AS id_conta_financeira,
+   SELECT fa.id AS id_conta_financeira_conta,
           fa.group_id AS company_group_id
    FROM main.ifood_benf_transaction_service.financial_account fa
    WHERE fa.deleted = false
@@ -98,13 +106,13 @@ ser corrigido depois.
    LIMIT 100
    ```
 
-10. **COLUNA `company_group_id` NO SELECT (OBRIGATÓRIA).**
+11. **COLUNA `company_group_id` NO SELECT (OBRIGATÓRIA).**
     Toda query deve expor o identificador do grupo como coluna de saída, com o alias
     exato `company_group_id`, vindo de um campo real da tabela — nunca de um literal.
     Qual campo usar está no bloco **Multi-tenant** de cada tabela
     (ex.: `c.company_group_id`, `group_id`, `r.company_group.id`).
 
-11. **FORMATO DA RESPOSTA.** Preencha o campo `sql` apenas com a query — sem explicação,
+12. **FORMATO DA RESPOSTA.** Preencha o campo `sql` apenas com a query — sem explicação,
     sem comentário, sem markdown.
 
 </regras>
