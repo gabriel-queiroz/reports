@@ -78,9 +78,9 @@ original tinha mais tabelas). **São chave literal para o código — não renum
 
 **Relacionamentos**: `company_id` → `companies.company_id` · `id` → `ifood_benefits_recharges.employee_id`
 
-**Colunas que NÃO existem** (confirmado no dump do Databricks): `employee_id`, `employee_name`, `hire_date`, `termination_date`. O `sql_system.md` as listava como "campos principais" — era invenção do prompt. Os equivalentes reais são `id` e `name_hash`.
+**Colunas que NÃO existem** (confirmado no dump do Databricks): `employee_id`, `employee_name`. O `sql_system.md` as listava como "campos principais" — era invenção do prompt. Os equivalentes reais são `id` e `name_hash`.
 
-**Fora de escopo por decisão**: `admission_date` e `discharge_date` **existem** na tabela física, mas por decisão do time (2026-08-13) **não devem ser usadas** e não são documentadas como colunas disponíveis. Perguntas do tipo "desligados em julho" não devem ser respondidas: o agente diz que não tem esse dado e **não usa `created_at` como substituto**. Para situação atual do colaborador, use `status` (ACTIVE/INACTIVE).
+**Situação do colaborador**: use `status` (`ACTIVE` / `INACTIVE`). As colunas disponíveis para relatório são exatamente as listadas abaixo — nenhuma outra.
 
 ### Categorias de Campos
 
@@ -645,7 +645,6 @@ Não dependem de mais nenhuma confirmação — são consequência direta do que
 
 | Pendência | Resolução |
 |-----------|-----------|
-| `employee` tem `hire_date`/`termination_date`? | **Não existem.** Não há data de admissão nem desligamento. Registrado na seção 7. |
 | `employee` tem `employee_id`/`employee_name`? | **Não existem.** São `id` e `name_hash`. Invenção do prompt, removida do `sql_system.md`. |
 | `ifood_benefits_recharges` tem `deleted`? | **Não existe** (nem `test`). Filtrar `r.deleted = false` quebra a query — removido dos exemplos do prompt. |
 | `ifood_benefits_recharges` tem `order_item_id`/`order_status`/`order_info`? | **Existem.** O catálogo é que estava incompleto — as três foram adicionadas à seção 4. |
@@ -657,7 +656,6 @@ Não dependem de mais nenhuma confirmação — são consequência direta do que
 | `mv_employee_config`, `anticipation`, `anticipation_receivable` existem? | **Nenhuma existe.** Saem do `TABLE_TO_DOMAIN` e do `TABLE_RELATIONSHIPS` (ver correções de código). |
 | `companies` tem `test`? | **Existe** (dump do Databricks). Decisão: não documentar nem filtrar por ela. |
 | `receivable_assets`: `EXPIRED` ou `OVERDUE`? `STARK_PAY` existe? | Dump lista **`EXPIRED`**; `OVERDUE` fica documentado como possível legado. **`STARK_PAY` existe.** |
-| `employee` tem data de admissão/desligamento? | **Existem** (`admission_date`, `discharge_date`). Decisão: fora de escopo, não usar. Ver seção 7. |
 | Oferecer os campos `_hash` de `employee` ao usuário? | **Manter como está.** Decisão de produto: seguem oferecidos como "Nome"/"Email"/"CPF"/"Telefone", entregando SHA-256. Registrado na seção 7 como comportamento aceito. |
 
 ---
