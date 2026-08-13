@@ -133,9 +133,9 @@ Campos de controle, datas e flags técnicas.
 
 **Multi-tenant**: STRUCT embutido — filtrar direto em `company_group.id`. JOIN com `companies` é opcional.
 
-**Partição obrigatória**: nenhuma confirmada. Usar `update_month` (YYYY-MM) como filtro temporal. ⚠️ O `sql_system.md` manda particionar por `update_date`, coluna que não existe neste catálogo.
+**Partição obrigatória**: `update_date` (confirmado que existe, junto com `update_month`). Usar `update_month` (YYYY-MM) como filtro temporal legível. ⚠️ Falta confirmar o **tipo/formato** de `update_date` e qual das duas é de fato a coluna de partição.
 
-**Filtros padrão**: nenhum confirmado. ⚠️ Os exemplos do prompt usam `deleted = false`, coluna não documentada aqui.
+**Filtros padrão**: nenhum — esta tabela **não tem** `deleted` nem `test` (confirmado). Filtrar `r.deleted = false` aqui quebra a query.
 
 **Relacionamentos**: `employee_id` → `employee.id` · `company_group.id` → `receivable_assets.company_group_id`
 
@@ -144,12 +144,15 @@ Campos de controle, datas e flags técnicas.
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição |
 |--------|------|-------------|----------|-----------|
 | `order_id` | STRING | `id_pedido` | Pedido | ID do pedido/transação |
+| `order_item_id` | STRING | `id_item_pedido` | Item do Pedido | ID do item de recarga. É a granularidade desta tabela (uma linha por item) |
 | `product_key` | STRING | `chave_produto` | Produto | FOOD_VOUCHER, MEAL_VOUCHER, MOBILITY_VOUCHER... |
+| `order_status` | STRING | `situacao_pedido` | Situação do Pedido | Status no nível do pedido |
 | `order_item_status` | STRING | `situacao_item_pedido` | Situação do Item | CREATED, DISTRIBUTION_COMPLETE |
 | `amount` | DOUBLE | `valor` | Valor | Valor da recarga (R$) |
 | `cashback_amount` | DOUBLE | `valor_cashback` | Cashback | Valor do cashback (R$) |
 | `employee_id` | STRING | `id_colaborador` | Colaborador | ID do funcionário |
 | `update_month` | STRING | `mes_atualizacao` | Mês de Atualização | Mês da atualização (YYYY-MM) |
+| `update_date` | STRING | `data_atualizacao` | Data de Atualização | **Coluna de partição** — filtrar sempre que possível. Tipo/formato a confirmar |
 | `schedule_date` | STRING | `data_agendamento` | Data de Agendamento | Data agendada (YYYY-MM-DD) |
 | `company_group` | STRUCT | `grupo_empresa` | Grupo de Empresas | {id, name, cnpj} - Dados do grupo corporativo. **Usar para filtrar por group_id diretamente!** |
 | `company` | STRUCT | `empresa` | Empresa | {id, name, cnpj} - Dados da companhia específica dentro do grupo |
@@ -165,7 +168,15 @@ Campos de controle, datas e flags técnicas.
 | `company.id` | STRING | `id_empresa` | Empresa | UUID da empresa dentro do grupo |
 | `company.name` | STRING | `nome_empresa` | Nome da Empresa | Nome da empresa |
 | `company.cnpj` | STRING | `cnpj_empresa` | CNPJ da Empresa | CNPJ da empresa |
+| `order_info.payment_method` | STRING | `forma_pagamento` | Forma de Pagamento | Meio de pagamento do pedido |
+| `order_info.balance_usage` | STRING | `uso_saldo` | Uso de Saldo | Indicação de uso de saldo na recarga |
+| `order_info.custom_description` | STRING | `descricao_personalizada` | Descrição | Descrição livre informada no pedido |
+| `order_info.distributed` | TIMESTAMP | `data_distribuicao` | Data de Distribuição | Momento da distribuição. Usado como filtro temporal fino |
+| `order_info.distribute_on` | STRING | `data_distribuicao_agendada` | Distribuição Agendada | Data agendada para distribuir |
 | `order_item_info.*` | STRUCT | - | - | ⚠️ Subcampos não documentados. Confirmar no Databricks antes de usar. |
+
+> Os aliases PT-BR de `order_info.*` foram propostos aqui (não vinham do catálogo original)
+> e os tipos ainda não foram confirmados — ajustar quando alguém validar no Databricks.
 
 
 ---
@@ -552,8 +563,8 @@ validação de colunas herda o erro deles. Cada um vira uma correção no `sql_s
 
 | # | Pendência | Impacto se ficar aberto |
 |---|-----------|-------------------------|
-| 1 | `ifood_benefits_recharges`: existe `deleted`? Qual é a partição real (`update_month`? `update_date`?) | Filtro obrigatório do prompt pode não existir; partição errada = full scan |
-| 2 | `ifood_benefits_recharges`: existem `order_item_id`, `order_status`, struct `order_info`? | Prompt descreve struct `order_info`; catálogo só tem `order_item_info` |
+| 1 | `ifood_benefits_recharges`: qual o tipo/formato de `update_date`, e ela ou `update_month` é a coluna de partição? | Partição errada = full scan numa tabela de ~93M linhas |
+| 2 | `ifood_benefits_recharges`: quais os tipos e subcampos reais de `order_info` e `order_item_info`? | Aliases e tipos de `order_info.*` foram propostos, não confirmados |
 | 3 | `chargeback`: o `group_id` é o UUID do grupo (mesmo de `company_group_id`)? Existem `origin` e `updated_at`? | Decide se JOIN com `companies` é necessário e se a validação atual está rejeitando query correta |
 | 4 | `company_tax_invoice`: o `group_id` é o UUID do grupo? | Mesmo caso do item 3 |
 | 5 | Existe a tabela `chargeback_employee`? E `mv_employee_config`, `anticipation`, `anticipation_receivable`? | Citadas no prompt e no código, ausentes do catálogo |
@@ -567,6 +578,9 @@ validação de colunas herda o erro deles. Cada um vira uma correção no `sql_s
 |-----------|-----------|
 | `employee` tem `hire_date`/`termination_date`? | **Não existem.** Não há data de admissão nem desligamento. Registrado na seção 7. |
 | `employee` tem `employee_id`/`employee_name`/`person_id`? | **Não existem.** São `id` e `name_hash`. Invenção do prompt, removida do `sql_system.md`. |
+| `ifood_benefits_recharges` tem `deleted`? | **Não existe** (nem `test`). Filtrar `r.deleted = false` quebra a query — removido dos exemplos do prompt. |
+| `ifood_benefits_recharges` tem `order_item_id`/`order_status`/`order_info`? | **Existem.** O catálogo é que estava incompleto — as três foram adicionadas à seção 4. |
+| `update_date` existe em `ifood_benefits_recharges`? | **Existe**, junto com `update_month`. Adicionada ao catálogo; tipo e papel de partição ainda a confirmar (pendência 1). |
 
 ---
 
