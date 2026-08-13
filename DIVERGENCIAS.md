@@ -270,7 +270,11 @@ O schema marca como "subcampos não documentados". O Databricks lista 8:
 | 1.3 `companies.test` | **Manter como está.** A coluna existe, mas não é documentada nem usada como filtro padrão. A afirmação falsa de que "não existe" foi corrigida. | ✅ |
 | 1.4 `receivable_assets.status` | **Documentar os dois.** `EXPIRED` como valor do dump, `OVERDUE` como possível legado. | ✅ |
 | 1.5 structs de `receivable_assets` | **Fora de escopo.** `pagar_me`, `zoop`, `metadata` e `amount_detail` existem, mas não entram no catálogo. Seguindo o critério do 1.1, o schema não os menciona — nem para dizer que não devem ser usados. | ✅ |
-| 2.x colunas faltantes (43) | pendente | |
+| 2.1 `employee` (18 faltantes) | **Nenhuma entra.** Catálogo segue com as 12 colunas atuais. | ✅ |
+| 2.2 `receivable_assets` (10) | **4 entram:** `asset_month` (partição), `bank_conciliation_date`, `numero_titulo`, `updated_at`. Ficam fora: os 4 structs (decisão 1.5), `aggregation_id` (técnico) e `ifood_benefits_profit` — margem do iFood, dado interno que não deve sair em relatório de cliente. | ✅ |
+| 2.3 `ifood_benefits_recharges` (7) | **2 entram:** `voucher_group` (PAT/LIVRE) e `release_month_11_10`. Ficam fora: `person_id` (decisão 1.2), `account_parent`, `group_billing_authority`, `has_error`, `error_info`. | ✅ |
+| 2.4 `companies` (5) | **3 entram:** `origin`, `created_at`, `updated_at`. Ficam fora: `test` (decisão 1.3) e `delivery_address`. | ✅ |
+| 2.5 `company_tax_invoice` (3) | **2 entram:** `type` e `updated_at`. Fica fora: `airbyte_metadata`. | ✅ |
 | 3 colunas só no schema (8) | pendente | |
 | 4 caminho da `companies` (`main.`) | pendente | |
 | 5 `group_id` nulo em notas fiscais | pendente | |

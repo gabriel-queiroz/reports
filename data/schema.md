@@ -160,6 +160,8 @@ Campos de controle, datas e flags técnicas.
 | `update_month` | STRING | `mes_atualizacao` | Mês de Atualização | Mês da atualização (YYYY-MM) |
 | `update_date` | STRING | `data_atualizacao_recarga` | Data de Atualização | **Coluna de partição** — filtrar sempre que possível. Tipo/formato a confirmar |
 | `schedule_date` | STRING | `data_agendamento` | Data de Agendamento | Data agendada (YYYY-MM-DD) |
+| `voucher_group` | STRING | `grupo_voucher` | Grupo do Voucher | Agrupamento de negócio do voucher: **PAT** ou **LIVRE** |
+| `release_month_11_10` | DATE | `mes_ciclo_11_10` | Mês do Ciclo (11→10) | Mês de negócio alternativo, ciclo do dia 11 ao dia 10, usado em cálculo financeiro |
 | `company_group` | STRUCT | `grupo_empresa` | Grupo de Empresas | {id, name, cnpj} - Dados do grupo corporativo. **Usar para filtrar por group_id diretamente!** |
 | `company` | STRUCT | `empresa` | Empresa | {id, name, cnpj} - Dados da companhia específica dentro do grupo |
 | `order_item_info` | STRUCT | `info_item_pedido` | Info do Item | Metadados do item |
@@ -225,6 +227,10 @@ Campos de controle, datas e flags técnicas.
 | `invoice_internal_number` | STRING | `numero_interno_fatura` | Número Interno | Número interno da fatura |
 | `invoice_external_number` | STRING | `numero_externo_fatura` | Número Externo | Número externo da fatura |
 | `external_id` | STRING | `id_externo_recebivel` | ID Externo | ID externo |
+| `asset_month` | STRING | `mes_ativo` | Mês do Ativo | **Coluna de partição** (YYYY-MM). Filtrar sempre |
+| `bank_conciliation_date` | STRING | `data_conciliacao_bancaria` | Data de Conciliação | Data de confirmação/conciliação bancária (YYYY-MM-DD) |
+| `numero_titulo` | STRING | `numero_titulo_recebivel` | Número do Título | Número externo do título, para identificação do pagamento |
+| `updated_at` | TIMESTAMP | `data_atualizacao_recebivel` | Data de Atualização | Timestamp da última modificação do registro |
 | `deleted` | BOOLEAN | `deletado_recebivel` | Deletado | Soft delete |
 
 
@@ -261,6 +267,9 @@ Campos de controle, datas e flags técnicas.
 | `card_delivery_type` | STRING | `tipo_entrega_cartao` | Tipo de Entrega | LOTE ou outro |
 | `is_cardless` | BOOLEAN | `sem_cartao` | Sem Cartão | Operação digital |
 | `commercial_address` | STRUCT | `endereco_comercial` | Endereço Comercial | Endereço comercial |
+| `origin` | STRING | `origem_cadastro` | Origem do Cadastro | Sistema que criou o registro: **SALESFORCE**, **SELFSALES** (entre outros) |
+| `created_at` | STRING | `data_criacao_empresa` | Data de Criação | Timestamp ISO de criação do registro da empresa |
+| `updated_at` | STRING | `data_atualizacao_empresa` | Data de Atualização | Timestamp ISO da última atualização |
 | `deleted` | BOOLEAN | `deletado_empresa` | Deletado | Soft delete |
 
 
@@ -380,7 +389,9 @@ Campos de controle, datas e flags técnicas.
 | `product_type` | STRING | `tipo_produto_nota` | Tipo de Produto | Tipo de produto |
 | `amount` | DOUBLE | `valor_nota` | Valor | Valor em R$ |
 | `deleted` | BOOLEAN | `deletado_nota` | Deletado | Soft delete |
+| `type` | STRING | `tipo_documento_nota` | Tipo de Documento | Classificação do tipo de documento fiscal. Pode ser nulo |
 | `created_at` | STRING | `data_criacao_nota` | Data de Criação | Criação |
+| `updated_at` | STRING | `data_atualizacao_nota` | Data de Atualização | Timestamp ISO da última modificação |
 
 ---
 
