@@ -78,9 +78,9 @@ original tinha mais tabelas). **São chave literal para o código — não renum
 
 **Relacionamentos**: `company_id` → `companies.company_id` · `id` → `ifood_benefits_recharges.employee_id`
 
-**Colunas que NÃO existem** (confirmado): `employee_id`, `employee_name`, `person_id`, `hire_date`, `termination_date`. O `sql_system.md` as listava como "campos principais" — é invenção do prompt. Os equivalentes reais são `id` e `name_hash`.
+**Colunas que NÃO existem** (confirmado no dump do Databricks): `employee_id`, `employee_name`, `hire_date`, `termination_date`. O `sql_system.md` as listava como "campos principais" — era invenção do prompt. Os equivalentes reais são `id` e `name_hash`.
 
-**Lacunas conhecidas** (confirmado): não há data de admissão nem de desligamento. Só existe `status` (ACTIVE/INACTIVE) e `created_at` (data de criação do registro, **não** de admissão). Perguntas do tipo "desligados em julho" **não têm resposta possível** neste catálogo — o agente deve dizer isso ao usuário, não improvisar coluna nem usar `created_at` como substituto.
+**Fora de escopo por decisão**: `admission_date` e `discharge_date` **existem** na tabela física, mas por decisão do time (2026-08-13) **não devem ser usadas** e não são documentadas como colunas disponíveis. Perguntas do tipo "desligados em julho" não devem ser respondidas: o agente diz que não tem esse dado e **não usa `created_at` como substituto**. Para situação atual do colaborador, use `status` (ACTIVE/INACTIVE).
 
 ### Categorias de Campos
 
@@ -203,7 +203,7 @@ Campos de controle, datas e flags técnicas.
 
 **Relacionamentos**: `receivable_asset_id` → `company_tax_invoice.receivable_asset_id` · `company_group_id` ← `ifood_benefits_recharges.company_group.id`
 
-**Enums** (confirmado): status é `OVERDUE` — `EXPIRED`, citado no prompt antigo, **não existe**. `STARK_PAY` é tipo válido e foi adicionado à lista.
+**Enums**: o dump do Databricks lista `status` como `PENDING, RECEIVED, CANCELED, EXPIRED`. `OVERDUE` está documentado aqui como possível valor legado — ao filtrar por vencidos, considerar os dois. `STARK_PAY` é tipo válido.
 
 **Divergência restante**: os structs `pagar_me`, `zoop`, `metadata` e `amount_detail`, citados no prompt antigo, seguem não documentados. Foram removidos do prompt até alguém confirmar.
 
@@ -213,7 +213,7 @@ Campos de controle, datas e flags técnicas.
 |--------|------|-------------|----------|-----------|
 | `receivable_asset_id` | STRING | `id_ativo_recebivel` | Ativo Recebível | UUID único do ativo |
 | `type` | STRING | `tipo` | Tipo | BOLETO, INVOICED_BOLETO, PIX, STARK_PAY |
-| `status` | STRING | `situacao` | Situação | PENDING, RECEIVED, CANCELED, OVERDUE |
+| `status` | STRING | `situacao` | Situação | PENDING, RECEIVED, CANCELED, EXPIRED (`OVERDUE` pode aparecer em registros legados) |
 | `product_type` | STRING | `tipo_produto` | Tipo de Produto | MEAL_VOUCHER, MOBILITY, CULTURE, etc. |
 | `company_group_id` | STRING | `company_group_id` | Grupo de Empresas | ID do grupo corporativo |
 | `amount` | DOUBLE | `valor` | Valor | Valor principal (R$) |
@@ -244,7 +244,7 @@ Campos de controle, datas e flags técnicas.
 
 **Alias obrigatório**: quando entrar por JOIN, usar o alias `c` (exigido pelo prompt e pelo `sql_validator.py`).
 
-**Filtros padrão**: `deleted = false`. ⚠️ **Confirmado que `test` NÃO existe** nesta tabela — os exemplos antigos do prompt filtravam `c.test = false`, o que quebraria a query. Já removido do `sql_system.md`.
+**Filtros padrão**: `deleted = false`. A coluna `test` **existe** na tabela física, mas por decisão do time (2026-08-13) não é documentada nem usada como filtro padrão — relatórios não separam empresa de teste.
 
 **Relacionamentos**: `company_id` ← `employee.company_id`, `chargeback.company_id`, `company_tax_invoice.company_id`
 
@@ -337,7 +337,6 @@ Campos de controle, datas e flags técnicas.
 | `chargeback_employee_status` | STRING | `situacao_estorno_colaborador` | Situação | Status do estorno para aquele colaborador |
 | `employee_id` | STRING | `id_colaborador` | Colaborador | UUID do colaborador |
 | `employee_name` | STRING | `nome_colaborador` | Nome do Colaborador | Nome do colaborador (ver nota de privacidade) |
-| `person_id` | STRING | `id_pessoa` | Pessoa | Identificador da pessoa |
 | `provider` | STRING | `saldo` | Saldo | Provedor/saldo utilizado |
 | `reason` | STRING | `motivo` | Motivo | Motivo: rescisão, valor indevido, solicitação indevida |
 | `tax_id` | STRING | `cpf_colaborador` | CPF | CPF do colaborador (ver nota de privacidade) |
@@ -647,7 +646,7 @@ Não dependem de mais nenhuma confirmação — são consequência direta do que
 | Pendência | Resolução |
 |-----------|-----------|
 | `employee` tem `hire_date`/`termination_date`? | **Não existem.** Não há data de admissão nem desligamento. Registrado na seção 7. |
-| `employee` tem `employee_id`/`employee_name`/`person_id`? | **Não existem.** São `id` e `name_hash`. Invenção do prompt, removida do `sql_system.md`. |
+| `employee` tem `employee_id`/`employee_name`? | **Não existem.** São `id` e `name_hash`. Invenção do prompt, removida do `sql_system.md`. |
 | `ifood_benefits_recharges` tem `deleted`? | **Não existe** (nem `test`). Filtrar `r.deleted = false` quebra a query — removido dos exemplos do prompt. |
 | `ifood_benefits_recharges` tem `order_item_id`/`order_status`/`order_info`? | **Existem.** O catálogo é que estava incompleto — as três foram adicionadas à seção 4. |
 | `update_date` existe em `ifood_benefits_recharges`? | **Existe**, junto com `update_month`. Adicionada ao catálogo; tipo e papel de partição ainda a confirmar (pendência 1). |
@@ -656,8 +655,9 @@ Não dependem de mais nenhuma confirmação — são consequência direta do que
 | O `group_id` de `company_tax_invoice` é o UUID do grupo? | **Sim.** Filtro direto; JOIN com `companies` vira opcional (só para dados cadastrais da empresa). |
 | `chargeback_employee` existe? | **Existe.** Documentada na seção 8 por inferência, marcada como não liberada até confirmarem caminho, colunas e multi-tenant. |
 | `mv_employee_config`, `anticipation`, `anticipation_receivable` existem? | **Nenhuma existe.** Saem do `TABLE_TO_DOMAIN` e do `TABLE_RELATIONSHIPS` (ver correções de código). |
-| `companies` tem `test`? | **Não existe.** Filtrar `c.test = false` quebraria a query. Já removido do prompt. |
-| `receivable_assets`: `EXPIRED` ou `OVERDUE`? `STARK_PAY` existe? | **`OVERDUE`** é o correto (`EXPIRED` não existe) e **`STARK_PAY` existe** — adicionado à lista de tipos. |
+| `companies` tem `test`? | **Existe** (dump do Databricks). Decisão: não documentar nem filtrar por ela. |
+| `receivable_assets`: `EXPIRED` ou `OVERDUE`? `STARK_PAY` existe? | Dump lista **`EXPIRED`**; `OVERDUE` fica documentado como possível legado. **`STARK_PAY` existe.** |
+| `employee` tem data de admissão/desligamento? | **Existem** (`admission_date`, `discharge_date`). Decisão: fora de escopo, não usar. Ver seção 7. |
 | Oferecer os campos `_hash` de `employee` ao usuário? | **Manter como está.** Decisão de produto: seguem oferecidos como "Nome"/"Email"/"CPF"/"Telefone", entregando SHA-256. Registrado na seção 7 como comportamento aceito. |
 
 ---

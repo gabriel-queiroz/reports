@@ -5,7 +5,8 @@
 **Fora de escopo por decisão:** `chargeback` e `chargeback_employee` — ambas ausentes do dump
 do Databricks e explicitamente ignoradas nesta análise.
 
-Nada aqui foi aplicado ao `schema.md`. É levantamento para decisão.
+É levantamento para decisão. O andamento das decisões está na seção **9. Status**, no fim
+do arquivo — o corpo da análise fica intacto como registro do que o dump mostrou.
 
 ---
 
@@ -257,6 +258,24 @@ O schema marca como "subcampos não documentados". O Databricks lista 8:
 `street`, `number`, `complement`, `postal_code`, `district`, `city`, `state`, `country`,
 `postal_code_validation_error`, `geo_loc_info` (`latitude`, `longitude`, `centroid_id`,
 `microcentroid_id`). Nenhum documentado no schema.
+
+---
+
+## 9. Status das decisões
+
+| Item | Decisão | Aplicado |
+|---|---|---|
+| 1.1 `employee.admission_date` / `discharge_date` | **Fora de escopo.** As colunas existem, mas não devem ser usadas. O agente segue recusando pergunta de período de admissão/desligamento e não usa `created_at` como substituto. A afirmação falsa de que "não existem" foi corrigida no catálogo. | ✅ |
+| 1.2 `employee.person_id` | **Remover toda menção.** Não entra no catálogo e saiu da lista de colunas inexistentes. Removida também a linha `person_id` da seção 8 (`chargeback_employee`). | ✅ |
+| 1.3 `companies.test` | **Manter como está.** A coluna existe, mas não é documentada nem usada como filtro padrão. A afirmação falsa de que "não existe" foi corrigida. | ✅ |
+| 1.4 `receivable_assets.status` | **Documentar os dois.** `EXPIRED` como valor do dump, `OVERDUE` como possível legado. | ✅ |
+| 1.5 structs de `receivable_assets` | pendente | |
+| 2.x colunas faltantes (43) | pendente | |
+| 3 colunas só no schema (8) | pendente | |
+| 4 caminho da `companies` (`main.`) | pendente | |
+| 5 `group_id` nulo em notas fiscais | pendente | |
+| 6 enums ausentes (19) | pendente | |
+| 7 subcampos de struct | pendente | |
 
 ---
 
