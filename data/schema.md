@@ -266,15 +266,17 @@ Campos de controle, datas e flags técnicas.
 
 **Domínio**: ⚠️ **conflito a resolver** — `schema_extractor.py` classifica como `recargas`; o `TABLE_RELATIONSHIPS` (`sql_validator.py`) e a descrição de domínios do agente classificam como `financeiro`. Enquanto os dois existirem, o domínio escolhido pelo LLM muda quais validações rodam.
 
-**Multi-tenant**: possui `group_id` direto (UUID do grupo). ⚠️ **conflito a resolver** — o `sql_system.md` e o `TABLE_RELATIONSHIPS` exigem JOIN com `companies`, e o `_has_valid_group_id_filter` só aceita `group_id` puro para `financial_account`/`financial_transaction`. Hoje um filtro correto `ch.group_id = '<uuid>'` é **rejeitado** pela validação.
+**Multi-tenant**: coluna direta `group_id` — **confirmado que é o UUID do grupo de empresas**, mesmo valor de `companies.company_group_id`. Filtrar `chargeback.group_id = '<uuid>'`. **JOIN com `companies` não é necessário.**
 
-**Partição obrigatória**: nenhuma documentada. ⚠️ O `sql_system.md` manda particionar/filtrar por `updated_at`, coluna que não existe nesta tabela.
+> ⚠️ **Correção pendente no código**: `_has_valid_group_id_filter` (`sql_validator.py:361-370`) só aceita `group_id` puro para `financial_account`/`financial_transaction`, e o `TABLE_RELATIONSHIPS` lista `chargeback` entre as tabelas que exigem JOIN com `companies`. Enquanto isso não mudar, o filtro correto acima é **rejeitado** pela validação.
+
+**Partição obrigatória**: `updated_at` (confirmado que a coluna existe). Confirmar se é de fato a coluna de partição.
 
 **Filtros padrão**: nenhum — esta tabela não tem `deleted` nem `test`.
 
-**Relacionamentos**: `company_id` → `companies.company_id`
+**Relacionamentos**: `company_id` → `companies.company_id` · `group_id` → grupo corporativo (direto)
 
-**Divergências com o prompt** (a confirmar no Databricks): `origin` e `updated_at` são citados no `sql_system.md` mas não existem aqui; a tabela `chargeback_employee`, descrita com 9 campos no prompt, não está neste catálogo.
+**Divergência restante**: a tabela `chargeback_employee`, descrita com 9 campos no `sql_system.md`, não está neste catálogo (pendência aberta).
 
 ### Colunas Principais
 
@@ -291,6 +293,8 @@ Campos de controle, datas e flags técnicas.
 | `total_amount_requested` | DOUBLE | `valor_total_solicitado` | Valor Solicitado | Valor solicitado |
 | `total_chargeback_employees` | BIGINT | `total_colaboradores_estorno` | Total de Colaboradores | Total de funcionários |
 | `total_divergent_chargeback_employees` | BIGINT | `total_colaboradores_divergencia_estorno` | Colaboradores com Divergência | Funcionários com divergência |
+| `updated_at` | STRING | `data_atualizacao` | Data de Atualização | Atualização (ISO 8601). Usar como filtro temporal / partição |
+| `origin` | STRING | `origem` | Origem | Origem do estorno: BACKOFFICE ou B2B |
 | `created_at` | STRING | `data_criacao` | Data de Criação | Criação (ISO 8601) |
 
 
@@ -304,7 +308,9 @@ Campos de controle, datas e flags técnicas.
 
 **Domínio**: `financeiro`
 
-**Multi-tenant**: possui `group_id` direto. ⚠️ **conflito a resolver** — o `sql_system.md:116-127` e o `TABLE_RELATIONSHIPS` exigem JOIN com `companies` para esta tabela, o que é desnecessário se o `group_id` daqui for o UUID do grupo.
+**Multi-tenant**: coluna direta `group_id` — **confirmado que é o UUID do grupo de empresas**. Filtrar `company_tax_invoice.group_id = '<uuid>'`. **JOIN com `companies` não é necessário** (segue útil quando o relatório precisar do nome da empresa).
+
+> ⚠️ **Correção pendente no código**: mesma do `chargeback` — `_has_valid_group_id_filter` não reconhece `group_id` puro para esta tabela.
 
 **Partição obrigatória**: nenhuma documentada.
 
@@ -449,10 +455,10 @@ financial_account.group_id       ──> (grupo corporativo)
 **Obrigatório em TODAS as queries. Escolha o método apropriado conforme a tabela:**
 
 ### Via JOIN (quando tabela não tem company_group_id embutido)
-> ⚠️ `chargeback` e `company_tax_invoice` aparecem aqui por herança do prompt antigo, mas
-> ambas possuem `group_id` próprio. Ver a seção de cada tabela — conflito ainda não resolvido.
+> Só `employee` precisa deste caminho. `chargeback` e `company_tax_invoice` já foram
+> resolvidas: têm `group_id` próprio (ver abaixo).
 ```sql
--- employee, chargeback - precisam de JOIN:
+-- employee - unica tabela que precisa de JOIN com companies:
 FROM main.ifoodoffice_management.employee e
 INNER JOIN fintech_companies.companies c ON e.company_id = c.company_id
 WHERE c.company_group_id = '{group_id}'
@@ -472,10 +478,17 @@ FROM main.fintech_finance.receivable_assets
 WHERE company_group_id = '{group_id}'
 ```
 
-### Via Coluna Direta `group_id` (financial_account)
+### Via Coluna Direta `group_id` (financial_account, chargeback, company_tax_invoice)
 ```sql
--- financial_account - tem group_id como coluna normal:
+-- financial_account, chargeback e company_tax_invoice tem group_id como coluna normal.
+-- Confirmado: o group_id destas tabelas e o mesmo UUID de companies.company_group_id.
 FROM main.ifood_benf_transaction_service.financial_account
+WHERE group_id = '{group_id}'
+
+FROM main.ifoodoffice_recharge_chargeback.chargeback
+WHERE group_id = '{group_id}'
+
+FROM main.ifoodoffice_invoice_service.company_tax_invoice
 WHERE group_id = '{group_id}'
 ```
 
@@ -565,12 +578,21 @@ validação de colunas herda o erro deles. Cada um vira uma correção no `sql_s
 |---|-----------|-------------------------|
 | 1 | `ifood_benefits_recharges`: qual o tipo/formato de `update_date`, e ela ou `update_month` é a coluna de partição? | Partição errada = full scan numa tabela de ~93M linhas |
 | 2 | `ifood_benefits_recharges`: quais os tipos e subcampos reais de `order_info` e `order_item_info`? | Aliases e tipos de `order_info.*` foram propostos, não confirmados |
-| 3 | `chargeback`: o `group_id` é o UUID do grupo (mesmo de `company_group_id`)? Existem `origin` e `updated_at`? | Decide se JOIN com `companies` é necessário e se a validação atual está rejeitando query correta |
-| 4 | `company_tax_invoice`: o `group_id` é o UUID do grupo? | Mesmo caso do item 3 |
-| 5 | Existe a tabela `chargeback_employee`? E `mv_employee_config`, `anticipation`, `anticipation_receivable`? | Citadas no prompt e no código, ausentes do catálogo |
-| 6 | `companies` tem `test`? | Exemplo canônico do prompt usa `c.test = false` |
-| 7 | `receivable_assets`: status `EXPIRED` ou `OVERDUE`? Tipo `STARK_PAY` existe? Structs `pagar_me`/`zoop`/`metadata`/`amount_detail`? | Enum errado = relatório vazio silencioso |
-| 8 | Os campos `_hash` de `employee` devem ser oferecidos ao usuário? Hoje aparecem como "Nome", "CPF", "Email" e entregam SHA-256. | Usuário pede "Nome, CPF, Email" e recebe CSV de hashes |
+| 3 | Existe a tabela `chargeback_employee`? E `mv_employee_config`, `anticipation`, `anticipation_receivable`? | Citadas no prompt e no código, ausentes do catálogo |
+| 4 | `companies` tem `test`? | Exemplo canônico do prompt usa `c.test = false` |
+| 5 | `receivable_assets`: status `EXPIRED` ou `OVERDUE`? Tipo `STARK_PAY` existe? Structs `pagar_me`/`zoop`/`metadata`/`amount_detail`? | Enum errado = relatório vazio silencioso |
+| 6 | Os campos `_hash` de `employee` devem ser oferecidos ao usuário? Hoje aparecem como "Nome", "CPF", "Email" e entregam SHA-256. | Usuário pede "Nome, CPF, Email" e recebe CSV de hashes |
+
+### Correções de código decorrentes das pendências já resolvidas
+
+Não dependem de mais nenhuma confirmação — são consequência direta do que já foi confirmado:
+
+| Onde | O quê |
+|------|-------|
+| `sql_validator.py:361-370` | `_has_valid_group_id_filter` deve aceitar `group_id` puro também para `chargeback` e `company_tax_invoice` (hoje só para `financial_account`/`financial_transaction`), senão rejeita filtro correto |
+| `sql_validator.py:159-160` | `TABLE_RELATIONSHIPS["financeiro"]`: mover `chargeback` e `company_tax_invoice` de `tables` para `tables_with_direct_group_id` |
+| `sql_validator.py:375-391` | `_financeiro_group_filter_clause` deve emitir `group_id = '<uuid>'` para as duas, em vez do filtro via alias de `companies` |
+| `schema_extractor.py:12` | `chargeback` está mapeada para `recargas`; o domínio dela precisa ser decidido (hoje diverge do `TABLE_RELATIONSHIPS`) |
 
 ### Resolvidas
 
@@ -581,6 +603,9 @@ validação de colunas herda o erro deles. Cada um vira uma correção no `sql_s
 | `ifood_benefits_recharges` tem `deleted`? | **Não existe** (nem `test`). Filtrar `r.deleted = false` quebra a query — removido dos exemplos do prompt. |
 | `ifood_benefits_recharges` tem `order_item_id`/`order_status`/`order_info`? | **Existem.** O catálogo é que estava incompleto — as três foram adicionadas à seção 4. |
 | `update_date` existe em `ifood_benefits_recharges`? | **Existe**, junto com `update_month`. Adicionada ao catálogo; tipo e papel de partição ainda a confirmar (pendência 1). |
+| O `group_id` de `chargeback` é o UUID do grupo? | **Sim.** Filtro direto `ch.group_id = '<uuid>'`; JOIN com `companies` deixa de ser obrigatório. Gera correção no `sql_validator.py`. |
+| `chargeback` tem `origin` e `updated_at`? | **As duas existem.** Adicionadas ao catálogo; `updated_at` é o filtro temporal/partição. |
+| O `group_id` de `company_tax_invoice` é o UUID do grupo? | **Sim.** Filtro direto; JOIN com `companies` vira opcional (só para dados cadastrais da empresa). |
 
 ---
 

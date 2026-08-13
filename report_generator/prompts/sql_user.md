@@ -89,7 +89,6 @@ EXEMPLO ERRADO (será rejeitado):
 
   SELECT * FROM ifood_benefits_recharges WHERE update_month >= '2026-01'
   ← Falta o filtro de company_group_id! Use OPÇÃO 2 com WHERE r.company_group.id = '{group_id}'
-  ← (e esta tabela não tem `deleted` — não filtre por essa coluna aqui)
 
 ═══════════════════════════════════════════════════════════════════════════
 
