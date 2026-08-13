@@ -53,6 +53,7 @@ original tinha mais tabelas). **São chave literal para o código — não renum
 - **4. iFood Benefits Recharges** (Recargas) — domínio `recargas`
 - **5. Receivable Assets** (Ativos a Receber) — domínio `financeiro`
 - **6. Chargeback** (Estornos) — domínio em conflito (ver seção)
+- **8. Chargeback Employee** (Estorno por Colaborador) — ⚠️ não confirmada, não liberar ainda
 - **9. Company Tax Invoice** (Notas Fiscais) — domínio `financeiro`
 - **10. Financial Account** (Conta Financeira) — domínio `financeiro`
 - **11. Financial Transaction** (Transação Financeira) — domínio `financeiro`
@@ -197,14 +198,16 @@ Campos de controle, datas e flags técnicas.
 
 **Relacionamentos**: `receivable_asset_id` → `company_tax_invoice.receivable_asset_id` · `company_group_id` ← `ifood_benefits_recharges.company_group.id`
 
-**Divergências com o prompt** (a confirmar no Databricks): o `sql_system.md` cita o status `EXPIRED` (aqui: `OVERDUE`), o tipo `STARK_PAY` (não listado) e os structs `pagar_me`, `zoop`, `metadata`, `amount_detail` (não documentados).
+**Enums** (confirmado): status é `OVERDUE` — `EXPIRED`, citado no prompt antigo, **não existe**. `STARK_PAY` é tipo válido e foi adicionado à lista.
+
+**Divergência restante**: os structs `pagar_me`, `zoop`, `metadata` e `amount_detail`, citados no prompt antigo, seguem não documentados. Foram removidos do prompt até alguém confirmar.
 
 ### Colunas Principais
 
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição |
 |--------|------|-------------|----------|-----------|
 | `receivable_asset_id` | STRING | `id_ativo_recebivel` | Ativo Recebível | UUID único do ativo |
-| `type` | STRING | `tipo` | Tipo | BOLETO, INVOICED_BOLETO, PIX |
+| `type` | STRING | `tipo` | Tipo | BOLETO, INVOICED_BOLETO, PIX, STARK_PAY |
 | `status` | STRING | `situacao` | Situação | PENDING, RECEIVED, CANCELED, OVERDUE |
 | `product_type` | STRING | `tipo_produto` | Tipo de Produto | MEAL_VOUCHER, MOBILITY, CULTURE, etc. |
 | `company_group_id` | STRING | `company_group_id` | Grupo de Empresas | ID do grupo corporativo |
@@ -236,7 +239,7 @@ Campos de controle, datas e flags técnicas.
 
 **Alias obrigatório**: quando entrar por JOIN, usar o alias `c` (exigido pelo prompt e pelo `sql_validator.py`).
 
-**Filtros padrão**: `deleted = false`. ⚠️ Os exemplos do prompt filtram `c.test = false`, coluna **não documentada** nesta tabela.
+**Filtros padrão**: `deleted = false`. ⚠️ **Confirmado que `test` NÃO existe** nesta tabela — os exemplos antigos do prompt filtravam `c.test = false`, o que quebraria a query. Já removido do `sql_system.md`.
 
 **Relacionamentos**: `company_id` ← `employee.company_id`, `chargeback.company_id`, `company_tax_invoice.company_id`
 
@@ -297,6 +300,44 @@ Campos de controle, datas e flags técnicas.
 | `origin` | STRING | `origem` | Origem | Origem do estorno: BACKOFFICE ou B2B |
 | `created_at` | STRING | `data_criacao` | Data de Criação | Criação (ISO 8601) |
 
+
+---
+
+## 8. Chargeback Employee (Estorno por Colaborador)
+
+**Local**: `main.ifoodoffice_recharge_chargeback.chargeback_employee` — ⚠️ caminho **inferido** do schema da `chargeback`, ainda não confirmado.
+
+**Descrição**: Detalhe do estorno no nível do colaborador. Uma linha por colaborador dentro de um estorno.
+
+**Domínio**: o mesmo da `chargeback` (ver o conflito registrado na seção 6).
+
+**Multi-tenant**: ⚠️ **não confirmado**. Não há coluna de grupo conhecida nesta tabela. O caminho provável é `INNER JOIN chargeback ch ON chargeback_employee.chargeback_id = ch.id` e filtro em `ch.group_id`. **Confirmar antes de liberar esta tabela para o agente.**
+
+**Partição obrigatória**: não confirmada.
+
+**Filtros padrão**: não confirmados (não se sabe se tem `deleted`/`test`).
+
+**Relacionamentos**: `chargeback_id` → `chargeback.id` · `employee_id` → `employee.id`
+
+**Privacidade**: ⚠️ diferente de `employee`, aqui `employee_name` e `tax_id` (CPF) aparecem **sem sufixo `_hash`**. Confirmar se são dados em claro antes de expor em relatório — isso muda o tratamento de LGPD do CSV.
+
+### Colunas Principais
+
+> ⚠️ Lista herdada do `sql_system.md` antigo e **não conferida coluna a coluna** no Databricks.
+> Os tipos e os aliases PT-BR abaixo foram propostos aqui, não vieram do catálogo original.
+
+| Coluna | Tipo | Alias PT-BR | Exibição | Descrição |
+|--------|------|-------------|----------|-----------|
+| `chargeback_id` | STRING | `id_estorno` | Estorno (ID) | FK para `chargeback.id` |
+| `chargeback_employee_status` | STRING | `situacao_estorno_colaborador` | Situação | Status do estorno para aquele colaborador |
+| `employee_id` | STRING | `id_colaborador` | Colaborador | UUID do colaborador |
+| `employee_name` | STRING | `nome_colaborador` | Nome do Colaborador | Nome do colaborador (ver nota de privacidade) |
+| `person_id` | STRING | `id_pessoa` | Pessoa | Identificador da pessoa |
+| `provider` | STRING | `saldo` | Saldo | Provedor/saldo utilizado |
+| `reason` | STRING | `motivo` | Motivo | Motivo: rescisão, valor indevido, solicitação indevida |
+| `tax_id` | STRING | `cpf_colaborador` | CPF | CPF do colaborador (ver nota de privacidade) |
+| `total_recharged_value` | DOUBLE | `valor_total_recarregado` | Valor Recarregado | Valor recarregado |
+| `total_requested_value` | DOUBLE | `valor_total_solicitado` | Valor Solicitado | Valor solicitado |
 
 ---
 
@@ -578,9 +619,9 @@ validação de colunas herda o erro deles. Cada um vira uma correção no `sql_s
 |---|-----------|-------------------------|
 | 1 | `ifood_benefits_recharges`: qual o tipo/formato de `update_date`, e ela ou `update_month` é a coluna de partição? | Partição errada = full scan numa tabela de ~93M linhas |
 | 2 | `ifood_benefits_recharges`: quais os tipos e subcampos reais de `order_info` e `order_item_info`? | Aliases e tipos de `order_info.*` foram propostos, não confirmados |
-| 3 | Existe a tabela `chargeback_employee`? E `mv_employee_config`, `anticipation`, `anticipation_receivable`? | Citadas no prompt e no código, ausentes do catálogo |
-| 4 | `companies` tem `test`? | Exemplo canônico do prompt usa `c.test = false` |
-| 5 | `receivable_assets`: status `EXPIRED` ou `OVERDUE`? Tipo `STARK_PAY` existe? Structs `pagar_me`/`zoop`/`metadata`/`amount_detail`? | Enum errado = relatório vazio silencioso |
+| 3 | `chargeback_employee`: caminho completo, colunas reais, tipos e estratégia multi-tenant | Tabela documentada por inferência — **não liberar para o agente** até confirmar |
+| 4 | `chargeback_employee`: `employee_name` e `tax_id` são dados em claro? | Muda o tratamento de LGPD do CSV entregue |
+| 5 | `receivable_assets`: os structs `pagar_me`, `zoop`, `metadata`, `amount_detail` existem? | Foram removidos do prompt; se existirem, o agente perde acesso a eles |
 | 6 | Os campos `_hash` de `employee` devem ser oferecidos ao usuário? Hoje aparecem como "Nome", "CPF", "Email" e entregam SHA-256. | Usuário pede "Nome, CPF, Email" e recebe CSV de hashes |
 
 ### Correções de código decorrentes das pendências já resolvidas
@@ -593,6 +634,9 @@ Não dependem de mais nenhuma confirmação — são consequência direta do que
 | `sql_validator.py:159-160` | `TABLE_RELATIONSHIPS["financeiro"]`: mover `chargeback` e `company_tax_invoice` de `tables` para `tables_with_direct_group_id` |
 | `sql_validator.py:375-391` | `_financeiro_group_filter_clause` deve emitir `group_id = '<uuid>'` para as duas, em vez do filtro via alias de `companies` |
 | `schema_extractor.py:12` | `chargeback` está mapeada para `recargas`; o domínio dela precisa ser decidido (hoje diverge do `TABLE_RELATIONSHIPS`) |
+| `schema_extractor.py:10,17` | Remover `mv_employee_config` e `anticipation` do `TABLE_TO_DOMAIN` — **confirmado que não existem** |
+| `sql_validator.py:139` | Remover `mv_employee_config` de `TABLE_RELATIONSHIPS["colaboradores"]["tables"]` pelo mesmo motivo |
+| `sql_validator.py:563-579` e `tools/list_fields.py:19-27` | Quando `chargeback_employee` for confirmada, incluir `"## 8. Chargeback Employee"` nos mapas de domínio — sem isso os aliases dela não são validados |
 
 ### Resolvidas
 
@@ -606,6 +650,10 @@ Não dependem de mais nenhuma confirmação — são consequência direta do que
 | O `group_id` de `chargeback` é o UUID do grupo? | **Sim.** Filtro direto `ch.group_id = '<uuid>'`; JOIN com `companies` deixa de ser obrigatório. Gera correção no `sql_validator.py`. |
 | `chargeback` tem `origin` e `updated_at`? | **As duas existem.** Adicionadas ao catálogo; `updated_at` é o filtro temporal/partição. |
 | O `group_id` de `company_tax_invoice` é o UUID do grupo? | **Sim.** Filtro direto; JOIN com `companies` vira opcional (só para dados cadastrais da empresa). |
+| `chargeback_employee` existe? | **Existe.** Documentada na seção 8 por inferência, marcada como não liberada até confirmarem caminho, colunas e multi-tenant. |
+| `mv_employee_config`, `anticipation`, `anticipation_receivable` existem? | **Nenhuma existe.** Saem do `TABLE_TO_DOMAIN` e do `TABLE_RELATIONSHIPS` (ver correções de código). |
+| `companies` tem `test`? | **Não existe.** Filtrar `c.test = false` quebraria a query. Já removido do prompt. |
+| `receivable_assets`: `EXPIRED` ou `OVERDUE`? `STARK_PAY` existe? | **`OVERDUE`** é o correto (`EXPIRED` não existe) e **`STARK_PAY` existe** — adicionado à lista de tipos. |
 
 ---
 
