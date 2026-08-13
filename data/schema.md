@@ -94,6 +94,11 @@ Use para identificar e referenciar colaboradores nos relatórios.
 #### 👤 Dados Pessoais (hasheados por privacidade)
 Todos os campos com sufixo `_hash` contêm SHA-256 do valor original. **Não contêm dados sensíveis legíveis.**
 
+> **Decisão registrada:** estes quatro campos continuam sendo oferecidos ao usuário com os
+> rótulos atuais ("Nome", "Email", "CPF", "Telefone"). Consequência conhecida e aceita: quem
+> pedir esses campos recebe um CSV com os hashes SHA-256, não com os valores legíveis.
+> Não é bug — se for para mudar, mexer aqui na coluna Exibição e nos aliases.
+
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição | Uso |
 |--------|------|-------------|----------|-----------|-----|
 | `name_hash` | STRING | `nome` | Nome | SHA-256 hash do nome completo. Não recuperável, apenas para matching. | Relatórios |
@@ -622,7 +627,6 @@ validação de colunas herda o erro deles. Cada um vira uma correção no `sql_s
 | 3 | `chargeback_employee`: caminho completo, colunas reais, tipos e estratégia multi-tenant | Tabela documentada por inferência — **não liberar para o agente** até confirmar |
 | 4 | `chargeback_employee`: `employee_name` e `tax_id` são dados em claro? | Muda o tratamento de LGPD do CSV entregue |
 | 5 | `receivable_assets`: os structs `pagar_me`, `zoop`, `metadata`, `amount_detail` existem? | Foram removidos do prompt; se existirem, o agente perde acesso a eles |
-| 6 | Os campos `_hash` de `employee` devem ser oferecidos ao usuário? Hoje aparecem como "Nome", "CPF", "Email" e entregam SHA-256. | Usuário pede "Nome, CPF, Email" e recebe CSV de hashes |
 
 ### Correções de código decorrentes das pendências já resolvidas
 
@@ -654,6 +658,7 @@ Não dependem de mais nenhuma confirmação — são consequência direta do que
 | `mv_employee_config`, `anticipation`, `anticipation_receivable` existem? | **Nenhuma existe.** Saem do `TABLE_TO_DOMAIN` e do `TABLE_RELATIONSHIPS` (ver correções de código). |
 | `companies` tem `test`? | **Não existe.** Filtrar `c.test = false` quebraria a query. Já removido do prompt. |
 | `receivable_assets`: `EXPIRED` ou `OVERDUE`? `STARK_PAY` existe? | **`OVERDUE`** é o correto (`EXPIRED` não existe) e **`STARK_PAY` existe** — adicionado à lista de tipos. |
+| Oferecer os campos `_hash` de `employee` ao usuário? | **Manter como está.** Decisão de produto: seguem oferecidos como "Nome"/"Email"/"CPF"/"Telefone", entregando SHA-256. Registrado na seção 7 como comportamento aceito. |
 
 ---
 
