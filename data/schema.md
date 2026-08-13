@@ -23,11 +23,15 @@ Documentação das tabelas Databricks do iFood Benefícios para geração de rel
 Exemplo correto:
 ```sql
 SELECT
-  id AS id_colaborador,
-  name_hash AS nome,
-  email_hash AS email,
-  created_at AS data_criacao
-FROM main.ifoodoffice_management.employee
+  e.id AS id_colaborador,
+  e.name_hash AS nome,
+  e.email_hash AS email,
+  e.created_at AS data_criacao,
+  c.company_group_id AS company_group_id
+FROM main.ifoodoffice_management.employee e
+INNER JOIN fintech_companies.companies c ON e.company_id = c.company_id
+WHERE e.deleted = false
+  AND c.company_group_id = '{group_id}'
 ```
 
 **⚠️ IMPORTANTE**: Os nomes entre `SELECT ... FROM` (id, name_hash, email_hash, created_at) são os nomes reais das colunas na tabela. Os nomes após `AS` (id_colaborador, nome, email, data_criacao) são os aliases em português que aparecem no resultado final.
@@ -41,14 +45,17 @@ Isso garante que:
 
 ## 📋 TABELAS DISPONÍVEIS
 
-1. **Employee** (Colaboradores)
-2. **Companies** (Empresas)
-3. **iFood Benefits Recharges** (Recargas)
-4. **Receivable Assets** (Ativos a Receber)
-5. **Chargeback** (Estornos)
-6. **Company Tax Invoice** (Notas Fiscais)
-7. **Financial Account** (Conta Financeira)
-8. **Financial Transaction** (Transação Financeira)
+Os números abaixo são os das seções deste arquivo (não são sequenciais: o catálogo
+original tinha mais tabelas). **São chave literal para o código — não renumerar.**
+
+- **7. Employee** (Colaboradores) — domínio `colaboradores`
+- **3. Companies** (Empresas) — transversal
+- **4. iFood Benefits Recharges** (Recargas) — domínio `recargas`
+- **5. Receivable Assets** (Ativos a Receber) — domínio `financeiro`
+- **6. Chargeback** (Estornos) — domínio em conflito (ver seção)
+- **9. Company Tax Invoice** (Notas Fiscais) — domínio `financeiro`
+- **10. Financial Account** (Conta Financeira) — domínio `financeiro`
+- **11. Financial Transaction** (Transação Financeira) — domínio `financeiro`
 
 ---
 
@@ -80,6 +87,7 @@ Use para identificar e referenciar colaboradores nos relatórios.
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição | Uso |
 |--------|------|-------------|----------|-----------|-----|
 | `id` | STRING | `id_colaborador` | ID | UUID único do funcionário. Chave primária da tabela. | ✅ Essencial |
+
 #### 👤 Dados Pessoais (hasheados por privacidade)
 Todos os campos com sufixo `_hash` contêm SHA-256 do valor original. **Não contêm dados sensíveis legíveis.**
 
@@ -398,19 +406,28 @@ Campos de controle, datas e flags técnicas.
 ## 📊 RELACIONAMENTOS
 
 ```
-employee ──via company_id──> ifood_benefits_recharges
-       ├──via company_id──> companies
+employee.id              ──> ifood_benefits_recharges.employee_id
+employee.company_id      ──> companies.company_id
 
-ifood_benefits_recharges ──via company_group.id──> receivable_assets
+ifood_benefits_recharges.company_group.id ──> companies.company_group_id
+ifood_benefits_recharges.company.id       ──> companies.company_id
 
-receivable_assets ──via company_group_id──> (grupo corporativo)
-                └──via receivable_asset_id──> company_tax_invoice
+receivable_assets.company_group_id   ──> companies.company_group_id
+receivable_assets.receivable_asset_id ──> company_tax_invoice.receivable_asset_id
 
-chargeback ──via company_id──> companies
+chargeback.company_id          ──> companies.company_id
+chargeback.group_id            ──> (grupo corporativo)
 
-financial_transaction ──via account_id──> financial_account
-financial_account ──via group_id──> (grupo corporativo)
+company_tax_invoice.company_id ──> companies.company_id
+company_tax_invoice.group_id   ──> (grupo corporativo)
+
+financial_transaction.account_id ──> financial_account.id
+financial_account.group_id       ──> (grupo corporativo)
 ```
+
+> A chave é sempre `tabela.coluna → tabela.coluna`, com o nome **físico** das duas pontas.
+> `ifood_benefits_recharges` **não** tem `company_id` de topo — a ligação com empresa é pelo
+> struct `company.id`, e com colaborador é por `employee_id`.
 
 ---
 
@@ -475,6 +492,53 @@ no `SELECT` (campo real da tabela, alias exato `company_group_id`).
 - **DATE**: Data (YYYY-MM-DD)
 - **TIMESTAMP**: Data e hora (ISO 8601)
 - **STRUCT**: Dados aninhados (usar `.campo` para expandir)
+
+---
+
+## ⚠️ ARMADILHAS DO CATÁLOGO
+
+Divergências reais entre tabelas deste mesmo arquivo. Não são erros de digitação — são
+o que o catálogo é hoje, e cada uma já causou ou causa query errada.
+
+### 1. O mesmo conceito de data tem tipo diferente conforme a tabela
+
+| Coluna | Tabela | Tipo | Formato |
+|--------|--------|------|---------|
+| `created_at` | employee, chargeback, company_tax_invoice, financial_account, financial_transaction | STRING | ISO 8601 |
+| `created_at` | **receivable_assets** | **TIMESTAMP** | — |
+| `paid_at` | receivable_assets | TIMESTAMP | — |
+| `due_date` | receivable_assets | STRING | YYYY-MM-DD |
+| `update_month` | ifood_benefits_recharges | STRING | **YYYY-MM** |
+| `schedule_date` | ifood_benefits_recharges | STRING | YYYY-MM-DD |
+| `transaction_date` | financial_transaction | STRING | YYYY-MM-DD |
+| `dt` | financial_transaction | DATE | YYYY-MM-DD |
+
+Filtrar período numa coluna STRING é **comparação de texto**: funciona por ser ISO, mas só
+se o filtro usar o mesmo comprimento de string. `update_month` é YYYY-MM — comparar com
+`'2026-07-01'` não faz o que parece.
+
+### 2. Aliases PT-BR repetidos em tabelas diferentes
+
+| Alias | Aponta para |
+|-------|-------------|
+| `id_conta_financeira` | `financial_account.id` **e** `financial_transaction.account_id` (colunas distintas) |
+| `id_empresa` | `company_id` (employee, chargeback, company_tax_invoice) e `company.id` (recargas) |
+| `id_grupo` | `group_id` (chargeback, company_tax_invoice, financial_account) e `company_group.id` (recargas) |
+| `valor` | `amount` em recargas, receivable_assets, company_tax_invoice, financial_transaction |
+| `tipo` | `type` em receivable_assets, financial_account, financial_transaction |
+| `situacao` | `status` em employee e em receivable_assets |
+| `data_criacao` | `created_at` em cinco tabelas |
+
+Em query com JOIN, dois campos com o mesmo alias produzem **colunas duplicadas no CSV**.
+Ao cruzar tabelas, desambiguar no alias (ex.: `valor_recarga`, `valor_nota`).
+
+### 3. Quatro aliases são idênticos ao nome físico da coluna
+
+`company_group_id`, `cnpj`, `login`, `numero_titulo`.
+
+Contradizem a regra do topo deste arquivo ("o que vem depois do `AS` é o nome em português")
+e são a causa dos falsos positivos do `validate_alias_misuse`, que hoje reprova query
+correta que filtre por `c.cnpj` ou agrupe por `c.company_group_id`.
 
 ---
 
