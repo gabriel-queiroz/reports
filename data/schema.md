@@ -195,7 +195,13 @@ Campos de controle, datas e flags técnicas.
 | `order_info.updated_by` | STRING | `atualizado_por` | Atualizado Por | Usuário da última atualização | — |
 | `order_info.deleted` | BOOLEAN | `deletado_pedido` | Deletado (pedido) | Soft delete **dentro do struct**. A tabela não tem `deleted` no topo — se precisar filtrar, é por aqui | — |
 | `order_info.test` | BOOLEAN | `teste_pedido` | Teste (pedido) | Flag de teste dentro do struct | — |
-| `order_item_info.*` | STRUCT | - | - | ⚠️ Subcampos não documentados. Confirmar no Databricks antes de usar. | — |
+| `order_item_info.created_at` | TIMESTAMP | `data_criacao_item` | Data de Criação do Item | Timestamp de criação do item de recarga | — |
+| `order_item_info.updated_at` | TIMESTAMP | `data_atualizacao_item` | Data de Atualização do Item | Timestamp da última atualização do item | — |
+| `order_item_info.transaction_id` | STRING | `id_transacao_item` | Transação | ID da transação associada ao item | — |
+| `order_item_info.correlation_id` | STRING | `id_correlacao_item` | Correlação | ID de correlação para rastreio entre sistemas | — |
+| `order_item_info.employee_id` | STRING | `id_colaborador_item` | Colaborador (item) | UUID do colaborador dentro do struct. Espelha `employee_id` do topo | — |
+| `order_item_info.deleted` | BOOLEAN | `deletado_item` | Deletado (item) | Soft delete do item, **dentro do struct** | — |
+| `order_item_info.test` | BOOLEAN | `teste_item` | Teste (item) | Flag de teste do item, dentro do struct | — |
 
 > Os aliases PT-BR de `order_info.*` foram propostos aqui (não vinham do catálogo original)
 > e os tipos ainda não foram confirmados — ajustar quando alguém validar no Databricks.
@@ -280,11 +286,29 @@ Campos de controle, datas e flags técnicas.
 | `company_group_name` | STRING | `nome_grupo_empresa` | Nome do Grupo | Nome do grupo | — |
 | `card_delivery_type` | STRING | `tipo_entrega_cartao` | Tipo de Entrega | LOTE ou outro | PAP (individual), LOTE (em lote) |
 | `is_cardless` | BOOLEAN | `sem_cartao` | Sem Cartão | Operação digital | — |
-| `commercial_address` | STRUCT | `endereco_comercial` | Endereço Comercial | Endereço comercial | — |
+| `commercial_address` | STRUCT | `endereco_comercial` | Endereço Comercial | Endereço comercial. Nunca selecionar inteiro — usar os subcampos abaixo | — |
 | `origin` | STRING | `origem_cadastro` | Origem do Cadastro | Sistema que criou o registro: **SALESFORCE**, **SELFSALES** (entre outros) | SALESFORCE, SELFSALES (entre outros) |
 | `created_at` | STRING | `data_criacao_empresa` | Data de Criação | Timestamp ISO de criação do registro da empresa | — |
 | `updated_at` | STRING | `data_atualizacao_empresa` | Data de Atualização | Timestamp ISO da última atualização | — |
 | `deleted` | BOOLEAN | `deletado_empresa` | Deletado | Soft delete | — |
+
+#### Campos de STRUCT (acessar com ponto — nunca selecionar o struct inteiro)
+
+| Coluna | Tipo | Alias PT-BR | Exibição | Descrição | Valores |
+|--------|------|-------------|----------|-----------|--------|
+| `commercial_address.street` | STRING | `logradouro` | Logradouro | Rua/avenida do endereço comercial | — |
+| `commercial_address.number` | STRING | `numero_endereco` | Número | Número do endereço | — |
+| `commercial_address.complement` | STRING | `complemento` | Complemento | Complemento do endereço | — |
+| `commercial_address.postal_code` | STRING | `cep` | CEP | CEP do endereço comercial | — |
+| `commercial_address.district` | STRING | `bairro` | Bairro | Bairro do endereço | — |
+| `commercial_address.city` | STRING | `cidade` | Cidade | Cidade do endereço | — |
+| `commercial_address.state` | STRING | `uf` | UF | Unidade federativa | — |
+| `commercial_address.country` | STRING | `pais` | País | País do endereço | — |
+| `commercial_address.postal_code_validation_error` | BOOLEAN | `erro_validacao_cep` | Erro de Validação do CEP | Indica CEP que falhou na validação | — |
+| `commercial_address.geo_loc_info.latitude` | DOUBLE | `latitude` | Latitude | Latitude do enriquecimento geográfico | — |
+| `commercial_address.geo_loc_info.longitude` | DOUBLE | `longitude` | Longitude | Longitude do enriquecimento geográfico | — |
+| `commercial_address.geo_loc_info.centroid_id` | STRING | `id_centroide` | Centroide | Identificador do centroide geográfico | — |
+| `commercial_address.geo_loc_info.microcentroid_id` | STRING | `id_microcentroide` | Microcentroide | Identificador do microcentroide geográfico | — |
 
 
 ---

@@ -8,20 +8,7 @@ daqui — está aplicado no `schema.md` e registrado nos commits.
 
 ---
 
-## 1. Subcampos de struct documentados pela metade
-
-### `ifood_benefits_recharges.order_item_info`
-O schema marca como "subcampos não documentados". O Databricks lista 8: `created_at`,
-`updated_at`, `transaction_id`, `correlation_id`, `employee_id`, `person_id`, `deleted`, `test`.
-
-### `companies.commercial_address`
-`street`, `number`, `complement`, `postal_code`, `district`, `city`, `state`, `country`,
-`postal_code_validation_error`, `geo_loc_info` (`latitude`, `longitude`, `centroid_id`,
-`microcentroid_id`). Nenhum documentado no schema — hoje o struct está lá como linha única.
-
----
-
-## 2. Correções de código
+## 1. Correções de código
 
 Não dependem de confirmação de ninguém — são consequência do que já foi decidido.
 
@@ -37,7 +24,7 @@ Não dependem de confirmação de ninguém — são consequência do que já foi
 
 ---
 
-## 3. Pendências que só o Databricks responde
+## 2. Pendências que só o Databricks responde
 
 | # | Pendência | Impacto se ficar aberto |
 |---|-----------|-------------------------|
