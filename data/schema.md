@@ -364,6 +364,8 @@ Campos de controle, datas e flags técnicas.
 
 **Multi-tenant**: coluna direta `group_id` — **confirmado que é o UUID do grupo de empresas**. Filtrar `company_tax_invoice.group_id = '<uuid>'`. **JOIN com `companies` não é necessário** (segue útil quando o relatório precisar do nome da empresa).
 
+> `group_id` é **nulo para empresas sem grupo**. O filtro por grupo nunca casa com nulo, então notas de empresa avulsa não aparecem em relatório por grupo — que é o comportamento esperado do isolamento.
+
 > ⚠️ **Correção pendente no código**: mesma do `chargeback` — `_has_valid_group_id_filter` não reconhece `group_id` puro para esta tabela.
 
 **Partição obrigatória**: nenhuma documentada.
@@ -426,9 +428,6 @@ Campos de controle, datas e flags técnicas.
 | `deleted` | BOOLEAN | `deletado_conta` | Deletado | Soft delete. Filtrar `deleted = false`. |
 | `created_at` | STRING | `data_criacao_conta` | Data de Criação | Timestamp ISO 8601 de criação da conta. |
 | `updated_at` | STRING | `data_atualizacao_conta` | Data de Atualização | Timestamp ISO 8601 da última atualização da conta. |
-| `_origin_time` | STRING | `tempo_origem_conta` | Tempo de Origem | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
-| `_processing_time` | STRING | `tempo_processamento_conta` | Tempo de Processamento | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
-| `_timeid` | STRING | `timeid_conta` | Time ID | Metadado técnico de particionamento. Normalmente ignorado em relatórios. |
 
 ---
 
@@ -444,7 +443,7 @@ Campos de controle, datas e flags técnicas.
 
 **Multi-tenant**: não possui coluna de grupo. Exige `INNER JOIN main.ifood_benf_transaction_service.financial_account fa ON financial_transaction.account_id = fa.id` e filtro em `fa.group_id`.
 
-**Partição obrigatória**: `dt` (DATE) / `dt_partition`.
+**Partição obrigatória**: nenhuma confirmada. O dump do Databricks não declara partição para esta tabela e não lista as colunas `dt`/`dt_partition` que o catálogo antigo citava. Não filtrar por elas — coluna inexistente quebra a query.
 
 **Filtros padrão**: `deleted = false`, `test = false`.
 
@@ -470,11 +469,6 @@ Campos de controle, datas e flags técnicas.
 | `deleted` | BOOLEAN | `deletado_transacao` | Deletado | Soft delete. Filtrar `deleted = false`. |
 | `created_at` | STRING | `data_criacao_transacao` | Data de Criação | Timestamp ISO 8601 de criação. |
 | `updated_at` | STRING | `data_atualizacao_transacao` | Data de Atualização | Timestamp ISO 8601 da última atualização. |
-| `dt` | DATE | `data` | Data | Data de particionamento (YYYY-MM-DD). |
-| `dt_partition` | STRING | `particao_data` | Partição de Data | Partição da tabela. |
-| `_origin_time` | STRING | `tempo_origem_transacao` | Tempo de Origem | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
-| `_processing_time` | STRING | `tempo_processamento_transacao` | Tempo de Processamento | Metadado técnico Databricks. Normalmente ignorado em relatórios. |
-| `_timeid` | STRING | `timeid_transacao` | Time ID | Metadado técnico de particionamento. Normalmente ignorado em relatórios. |
 
 ---
 

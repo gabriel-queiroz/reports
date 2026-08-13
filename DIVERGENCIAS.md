@@ -275,9 +275,9 @@ O schema marca como "subcampos não documentados". O Databricks lista 8:
 | 2.3 `ifood_benefits_recharges` (7) | **2 entram:** `voucher_group` (PAT/LIVRE) e `release_month_11_10`. Ficam fora: `person_id` (decisão 1.2), `account_parent`, `group_billing_authority`, `has_error`, `error_info`. | ✅ |
 | 2.4 `companies` (5) | **3 entram:** `origin`, `created_at`, `updated_at`. Ficam fora: `test` (decisão 1.3) e `delivery_address`. | ✅ |
 | 2.5 `company_tax_invoice` (3) | **2 entram:** `type` e `updated_at`. Fica fora: `airbyte_metadata`. | ✅ |
-| 3 colunas só no schema (8) | pendente | |
-| 4 caminho da `companies` (`main.`) | pendente | |
-| 5 `group_id` nulo em notas fiscais | pendente | |
+| 3 colunas só no schema (8) | **Removidas.** `_origin_time`, `_processing_time`, `_timeid` (nas duas tabelas), `dt` e `dt_partition`. São metadados técnicos, nunca vão para um CSV de negócio, e não constam no dump. A partição de `financial_transaction` passou de "`dt`/`dt_partition` obrigatória" para "nenhuma confirmada" — mandar filtrar por coluna inexistente quebra a query. | ✅ |
+| 4 caminho da `companies` (`main.`) | **Adiado — mudança acoplada a código.** Testado: com `main.fintech_companies.companies`, o `validate_mandatory_joins` **rejeita toda query de colaboradores**, porque os padrões casam `JOIN FINTECH_COMPANIES.COMPANIES` e não reconhecem o `main.` no meio. Schema e código precisam mudar no mesmo deploy. Ver correções de código. | ⏸ |
+| 5 `group_id` nulo em notas fiscais | **Documentado.** Nota no bloco multi-tenant da seção 9: nota de empresa sem grupo não aparece em relatório por grupo, e isso é o isolamento funcionando. | ✅ |
 | 6 enums ausentes (19) | pendente | |
 | 7 subcampos de struct | pendente | |
 | Armadilha "tipos de data divergentes" | **Virou regra.** Nova regra 5 do `sql_system.md` manda filtrar conforme o Tipo declarado, com o caso do `update_month` (YYYY-MM) e o do `created_at` que muda de tipo entre tabelas. | ✅ |
@@ -324,3 +324,4 @@ Não dependem de mais nenhuma confirmação — são consequência direta do que
 | `schema_extractor.py:10,17` | Remover `mv_employee_config` e `anticipation` do `TABLE_TO_DOMAIN` — **confirmado que não existem** |
 | `sql_validator.py:139` | Remover `mv_employee_config` de `TABLE_RELATIONSHIPS["colaboradores"]["tables"]` pelo mesmo motivo |
 | `sql_validator.py:563-579` e `tools/list_fields.py:19-27` | Quando `chargeback_employee` for confirmada, incluir `"## 8. Chargeback Employee"` nos mapas de domínio — sem isso os aliases dela não são validados |
+| `sql_validator.py:287-300`, `:341`, `:170`, `schema_extractor.py:70-74` | **Caminho da `companies`.** O Databricks é `main.fintech_companies.companies`; schema, prompts e código usam `fintech_companies.companies`. Para adotar o caminho completo é preciso, no mesmo deploy: aceitar o prefixo `main.` em `companies_patterns`, no regex de `_extract_companies_table_alias`, em `TABLE_RELATIONSHIPS["company_filter_table"]` e no append hardcoded do `schema_extractor`. Comprovado que, sem isso, toda query de colaboradores é rejeitada |
