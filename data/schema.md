@@ -549,8 +549,9 @@ WHERE fa.group_id = '<uuid-do-grupo>'
 Além do filtro, toda query deve incluir o `company_group_id` como coluna de saída
 no `SELECT` (campo real da tabela, alias exato `company_group_id`).
 
-> Para `financial_account` e `financial_transaction`, o campo de grupo é `group_id`
-> (alias `id_grupo`). Use esse campo no filtro e na coluna de saída.
+> Para `financial_account` e `financial_transaction`, o campo de grupo é `group_id`.
+> Use esse campo no filtro e exponha-o com o alias exato `company_group_id` — a coluna
+> de saída do grupo usa sempre esse alias, sobrepondo o Alias PT-BR da tabela.
 
 ---
 
@@ -566,50 +567,4 @@ no `SELECT` (campo real da tabela, alias exato `company_group_id`).
 
 ---
 
-## ⏳ PENDÊNCIAS — a confirmar no Databricks
-
-Itens que este catálogo **não** consegue resolver sozinho. Enquanto estiverem abertos, a
-validação de colunas herda o erro deles. Cada um vira uma correção no `sql_system.md`, no
-`sql_validator.py` ou aqui — nunca uma invenção do LLM.
-
-| # | Pendência | Impacto se ficar aberto |
-|---|-----------|-------------------------|
-| 1 | `ifood_benefits_recharges`: qual o tipo/formato de `update_date`, e ela ou `update_month` é a coluna de partição? | Partição errada = full scan numa tabela de ~93M linhas |
-| 2 | `ifood_benefits_recharges`: quais os tipos e subcampos reais de `order_info` e `order_item_info`? | Aliases e tipos de `order_info.*` foram propostos, não confirmados |
-| 3 | `chargeback_employee`: caminho completo, colunas reais, tipos e estratégia multi-tenant | Tabela documentada por inferência — **não liberar para o agente** até confirmar |
-| 4 | `chargeback_employee`: `employee_name` e `tax_id` são dados em claro? | Muda o tratamento de LGPD do CSV entregue |
-
-### Correções de código decorrentes das pendências já resolvidas
-
-Não dependem de mais nenhuma confirmação — são consequência direta do que já foi confirmado:
-
-| Onde | O quê |
-|------|-------|
-| `sql_validator.py:361-370` | `_has_valid_group_id_filter` deve aceitar `group_id` puro também para `chargeback` e `company_tax_invoice` (hoje só para `financial_account`/`financial_transaction`), senão rejeita filtro correto |
-| `sql_validator.py:159-160` | `TABLE_RELATIONSHIPS["financeiro"]`: mover `chargeback` e `company_tax_invoice` de `tables` para `tables_with_direct_group_id` |
-| `sql_validator.py:375-391` | `_financeiro_group_filter_clause` deve emitir `group_id = '<uuid>'` para as duas, em vez do filtro via alias de `companies` |
-| `schema_extractor.py:12` | `chargeback` está mapeada para `recargas`; o domínio dela precisa ser decidido (hoje diverge do `TABLE_RELATIONSHIPS`) |
-| `schema_extractor.py:10,17` | Remover `mv_employee_config` e `anticipation` do `TABLE_TO_DOMAIN` — **confirmado que não existem** |
-| `sql_validator.py:139` | Remover `mv_employee_config` de `TABLE_RELATIONSHIPS["colaboradores"]["tables"]` pelo mesmo motivo |
-| `sql_validator.py:563-579` e `tools/list_fields.py:19-27` | Quando `chargeback_employee` for confirmada, incluir `"## 8. Chargeback Employee"` nos mapas de domínio — sem isso os aliases dela não são validados |
-
-### Resolvidas
-
-| Pendência | Resolução |
-|-----------|-----------|
-| `employee` tem `employee_id`/`employee_name`? | **Não existem.** São `id` e `name_hash`. Invenção do prompt, removida do `sql_system.md`. |
-| `ifood_benefits_recharges` tem `deleted`? | **Não existe** (nem `test`). Filtrar `r.deleted = false` quebra a query — removido dos exemplos do prompt. |
-| `ifood_benefits_recharges` tem `order_item_id`/`order_status`/`order_info`? | **Existem.** O catálogo é que estava incompleto — as três foram adicionadas à seção 4. |
-| `update_date` existe em `ifood_benefits_recharges`? | **Existe**, junto com `update_month`. Adicionada ao catálogo; tipo e papel de partição ainda a confirmar (pendência 1). |
-| O `group_id` de `chargeback` é o UUID do grupo? | **Sim.** Filtro direto `ch.group_id = '<uuid>'`; JOIN com `companies` deixa de ser obrigatório. Gera correção no `sql_validator.py`. |
-| `chargeback` tem `origin` e `updated_at`? | **As duas existem.** Adicionadas ao catálogo; `updated_at` é o filtro temporal/partição. |
-| O `group_id` de `company_tax_invoice` é o UUID do grupo? | **Sim.** Filtro direto; JOIN com `companies` vira opcional (só para dados cadastrais da empresa). |
-| `chargeback_employee` existe? | **Existe.** Documentada na seção 8 por inferência, marcada como não liberada até confirmarem caminho, colunas e multi-tenant. |
-| `mv_employee_config`, `anticipation`, `anticipation_receivable` existem? | **Nenhuma existe.** Saem do `TABLE_TO_DOMAIN` e do `TABLE_RELATIONSHIPS` (ver correções de código). |
-| `companies` tem `test`? | **Existe** (dump do Databricks). Decisão: não documentar nem filtrar por ela. |
-| `receivable_assets`: `EXPIRED` ou `OVERDUE`? `STARK_PAY` existe? | Dump lista **`EXPIRED`**; `OVERDUE` fica documentado como possível legado. **`STARK_PAY` existe.** |
-| Oferecer os campos `_hash` de `employee` ao usuário? | **Manter como está.** Decisão de produto: seguem oferecidos como "Nome"/"Email"/"CPF"/"Telefone", entregando SHA-256. Registrado na seção 7 como comportamento aceito. |
-
----
-
-*Documentação atualizada em 2026-07-22 para suportar agente gerador de relatórios B2B do iFood Benefits.*
+*Documentação atualizada em 2026-08-13 para suportar agente gerador de relatórios B2B do iFood Benefits.*
