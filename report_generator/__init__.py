@@ -1,5 +1,1 @@
-from domain.agents.reports_b2b.report_generator.report_generator_agent import (
-    ReportGeneratorAgent,
-)
-
-__all__ = ["ReportGeneratorAgent"]
+"""Geração de SQL: prompts e o miolo chamado pela tool `execute_query`."""

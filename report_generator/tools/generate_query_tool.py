@@ -1,28 +1,30 @@
-"""SQL generation tool with hardcoded security validations."""
+"""Geração do SQL a partir da pergunta, com o guard de AST na saída.
 
-import json
+Não é uma tool: é o miolo chamado pela `execute_query`. O que sai daqui já
+passou pelo `sql_guard` — statement de leitura, tabelas e colunas do catálogo,
+filtro de tenant e teto de linhas.
+"""
+
 import logging
 from pathlib import Path
-from typing import Literal
 
-from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from domain.agents.reports_b2b.report_generator.prompts import (
-    sql_system_prompt,
-    sql_user_prompt,
-)
 from domain.agents.reports_b2b.guardrails import (
     InvalidGroupIdError,
     sanitize_question,
     validate_group_id,
 )
+from domain.agents.reports_b2b.report_generator.prompts import (
+    sql_system_prompt,
+    sql_user_prompt,
+)
 from domain.agents.reports_b2b.schema_extractor import get_all_tables_for_sql_generation
-from domain.agents.reports_b2b.sql_guard import SqlGuardError, guard_query
-from domain.agents.reports_b2b.sql_validator import (
-    GROUP_ID_FIELD_MAPPING,
-    QueryNotAllowedError,
+from domain.agents.reports_b2b.sql_guard import (
+    MAX_REPORT_ROWS,
+    SqlGuardError,
+    guard_query,
 )
 from domain.core.ioc import get_logger
 from domain.infra.genplat.genplat_provider import GenplatProvider
@@ -33,26 +35,6 @@ logger = logging.getLogger(__name__)
 # tentativa anterior — antes disso, todas as validações tentavam duas vezes com
 # exatamente o mesmo prompt.
 MAX_SQL_ATTEMPTS = 2
-
-
-class GenerateSQLInput(BaseModel):
-    """Input schema for SQL generation tool."""
-
-    question: str = Field(
-        description=(
-            "Pergunta do usuário reescrita de forma completa e autocontida, "
-            "incluindo período, filtros e agrupamentos desejados."
-        )
-    )
-    domain: Literal["colaboradores", "recargas", "financeiro"] = Field(
-        description="Domínio de dados a consultar."
-    )
-    group_id: str = Field(
-        description=(
-            "UUID do grupo de empresa para filtro de segurança "
-            "multi-tenant (OBRIGATÓRIO)."
-        )
-    )
 
 
 class GeneratedQuery(BaseModel):
@@ -188,12 +170,14 @@ async def _generate_sql_internal(
     # LLM needs to see all tables to understand relationships and create proper JOINs
     tables = get_all_tables_for_sql_generation()
 
-    # Build security instruction for group_id (mandatory)
-    group_field = GROUP_ID_FIELD_MAPPING.get(domain, "companies.company_group_id")
+    # Instrução de segurança multi-tenant. Não nomeia uma coluna fixa: cada
+    # tabela tem a sua (ver FILTROS DE SEGURANÇA MULTI-TENANT no catálogo), e
+    # apontar `companies.company_group_id` para todas — como era feito aqui —
+    # contradizia o próprio catálogo.
     group_id_restriction = (
-        f"Query MUST filter by {group_field} = '{group_id}' to ensure "
-        f"only correct company group data is returned. "
-        f"This restriction is MANDATORY for multi-tenant security."
+        f"Toda query DEVE filtrar pelo grupo '{group_id}', usando a coluna de "
+        f"grupo da própria tabela consultada (ou o JOIN indicado no catálogo "
+        f"quando ela não tiver uma). Sem esse filtro a query é REJEITADA."
     )
 
     # Create prompts for SQL generation
@@ -201,6 +185,7 @@ async def _generate_sql_internal(
         restricao_group_id=group_id_restriction,
         documentacao_tabelas=tables_doc,
         group_id=group_id,
+        max_rows=MAX_REPORT_ROWS,
     )
     sql_user = sql_user_prompt(
         dominio=domain,
@@ -244,7 +229,6 @@ async def _generate_sql_internal(
                 "SQL generated successfully",
                 domain=domain,
                 sql_length=len(sql),
-                group_field=group_field,
                 sql=sql,
             )
             return sql
@@ -268,86 +252,3 @@ async def _generate_sql_internal(
                 max_attempts=MAX_SQL_ATTEMPTS,
             )
             raise
-
-
-@tool(args_schema=GenerateSQLInput)
-def generate_sql_tool(
-    question: str,
-    domain: str,
-    group_id: str,
-) -> str:
-    """Generate Databricks SQL with hardcoded security validations.
-
-    Returns JSON with status, message and SQL (if successful).
-    """
-    log = get_logger()
-
-    # Placeholder para genplat_provider (será injetado pelo agente)
-    # TODO: Passar genplat_provider via contexto da tool
-    try:
-        from domain.infra.genplat.genplat_provider import GenplatProvider
-
-        genplat_provider = GenplatProvider(log)
-        log.log_information("GenplatProvider initialized", domain=domain)
-    except Exception as e:
-        log.log_error("Failed to initialize GenplatProvider", e, domain=domain)
-        return json.dumps(
-            {
-                "status": "erro",
-                "mensagem": "Falha ao inicializar SQL generator. Tente novamente.",
-            },
-            ensure_ascii=False,
-        )
-
-    try:
-        log.log_information(
-            "generate_sql_tool called",
-            domain=domain,
-            question_length=len(question),
-        )
-        sql = _generate_sql_internal(question, domain, group_id, genplat_provider)
-        log.log_information(
-            "SQL generated in generate_sql_tool",
-            domain=domain,
-            sql_length=len(sql),
-            status="success",
-        )
-        return json.dumps(
-            {
-                "status": "pending_execution",
-                "message": (
-                    "Query prepared and registered. Report will be delivered "
-                    "as .csv file."
-                ),
-                "sql": sql,
-            },
-            ensure_ascii=False,
-        )
-    except QueryNotAllowedError as e:
-        log.log_warning(
-            "Query blocked by validators in generate_sql_tool",
-            domain=domain,
-            error=str(e),
-        )
-        return json.dumps(
-            {
-                "status": "error",
-                "message": (
-                    "Could not complete this query. Try rephrasing the question."
-                ),
-            },
-            ensure_ascii=False,
-        )
-    except Exception as e:
-        log.log_error(
-            "Failed to generate SQL in generate_sql_tool",
-            e,
-            domain=domain,
-        )
-        return json.dumps(
-            {
-                "status": "error",
-                "message": "Temporary problem generating SQL. Try again shortly.",
-            },
-            ensure_ascii=False,
-        )

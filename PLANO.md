@@ -120,22 +120,26 @@ vez quando a fase 5 tirar o último `except InvalidFieldsError`.
 
 ---
 
-## Fase 5 — Bugs pontuais e limpeza
+## ✅ Fase 5 — Bugs pontuais e limpeza
 
-- [ ] **Race condition de tenant:** `self.group_id`/`self.user_id` são atributos de instância
-      (`reports_react_agent/agent.py`), e a instância é única no grafo compilado. Com duas
-      sessões concorrentes, o prompt de um usuário pode receber o UUID de outro. Passar pelo
-      `state`.
-- [ ] **Descasamento prompt × tool:** `agente.md` manda chamar
-      `execute_query(pergunta=, dominio=, campos_desejados=, group_id=, user_id=)`; o schema é
-      `question`, `domain`, `desired_fields`, sem os dois últimos.
-- [ ] **`invoke` síncrono dentro de tool async** — bloqueia o event loop durante toda a chamada
-      do LLM. Usar `ainvoke`.
-- [ ] **`LIMIT 1000` fixo** truncando CSV sem avisar o usuário.
-- [ ] **`list_fields`** devolve o `schema.md` inteiro a cada chamada; `DOMAIN_MARKERS["financeiro"]`
-      não cita conta nem transação financeira.
-- [ ] **Código morto:** `report_generator_agent.py` (fora do grafo e com path de schema quebrado),
-      `generate_sql_tool`, `InvalidFieldsError`.
+- [x] **Race condition de tenant:** `group_id`/`user_id` saíram dos atributos de instância. O
+      UUID canônico segue no `state`, que é por sessão. Reproduzido antes de corrigir: com o
+      código antigo, duas sessões concorrentes fazem a sessão A receber o grupo de B.
+- [x] **Descasamento prompt × tool:** `agente.md` agora descreve `question`, `domain` e
+      `desired_fields` — os três parâmetros que existem —, e um teste compara o texto do prompt
+      com o `ExecuteQueryInput`.
+- [x] **`invoke` síncrono dentro de tool async:** `_generate_sql_internal` virou `async` e usa
+      `ainvoke`.
+- [x] **`LIMIT` fixo:** virou `MAX_REPORT_ROWS`, **garantido pelo guard** (injeta quando falta,
+      reduz quando o LLM pede mais) em vez de só pedido no prompt. A tool devolve `row_limit` e
+      o prompt manda avisar o usuário do teto.
+- [x] **`list_fields`:** monta a lista do catálogo, por tabela, com a coluna *Exibição*. Saiu de
+      ~44k caracteres por chamada para ~0,7k (colaboradores). O `DOMAIN_MARKERS`, que esquecia
+      conta e transação financeira, deixou de existir — o mapa de domínios é um só.
+- [x] **Código morto:** `report_generator_agent.py`, `generate_sql_tool`, `GenerateSQLInput`,
+      `InvalidFieldsError` e, com eles, o `sql_validator.py` inteiro. `GROUP_ID_FIELD_MAPPING`
+      foi junto: apontava `companies.company_group_id` para todos os domínios, contradizendo o
+      catálogo na própria instrução de segurança do prompt.
 
 ---
 

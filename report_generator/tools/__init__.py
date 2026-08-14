@@ -1,5 +1,5 @@
-"""Tools for report generation."""
+"""Geração de SQL a partir da pergunta do usuário."""
 
-from .generate_query_tool import generate_sql_tool
+from .generate_query_tool import _generate_sql_internal
 
-__all__ = ["generate_sql_tool"]
+__all__ = ["_generate_sql_internal"]

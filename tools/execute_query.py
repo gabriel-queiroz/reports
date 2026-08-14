@@ -16,8 +16,8 @@ from domain.agents.reports_b2b.guardrails import (
     sanitize_question,
     validate_group_id,
 )
-from domain.agents.reports_b2b.sql_validator import (
-    InvalidFieldsError,
+from domain.agents.reports_b2b.sql_guard import (
+    MAX_REPORT_ROWS,
     QueryNotAllowedError,
 )
 from domain.core.ioc import get_logger
@@ -159,27 +159,18 @@ async def execute_query(
         return json.dumps(
             {
                 "status": "success",
-                "message": "Report generation requested successfully.",
+                "message": (
+                    "Report generation requested successfully. "
+                    f"O relatório traz no máximo {MAX_REPORT_ROWS} linhas — "
+                    "avise o usuário disso ao entregar."
+                ),
                 "report_id": report_id,
+                "row_limit": MAX_REPORT_ROWS,
                 "result": result,
             },
             ensure_ascii=False,
         )
 
-    except InvalidFieldsError as e:
-        logger.log_warning(
-            "Invalid fields error in execute_query",
-            domain=domain,
-            user_id=user_id,
-            error=str(e),
-        )
-        return json.dumps(
-            {
-                "status": "invalid_fields",
-                "message": f"I couldn't understand some fields you mentioned. {e!s}",
-            },
-            ensure_ascii=False,
-        )
     except QueryNotAllowedError as e:
         logger.log_warning(
             "Query blocked by validators in execute_query",

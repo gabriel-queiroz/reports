@@ -5,7 +5,7 @@ exatamente como faz no projeto principal. Em vez de copiar os arquivos para cá 
 criaria duas versões do mesmo código — este pacote aponta o próprio `__path__` para a
 raiz do repositório.
 
-Efeito: `domain.agents.reports_b2b.sql_validator` carrega `./sql_validator.py`, sem que
+Efeito: `domain.agents.reports_b2b.sql_guard` carrega `./sql_guard.py`, sem que
 nenhum arquivo do agente precise ser alterado. Quando o agente voltar para o projeto
 real, nada aqui vai junto.
 

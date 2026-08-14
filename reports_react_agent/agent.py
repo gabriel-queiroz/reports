@@ -130,7 +130,7 @@ class ReportsB2bReactAgent(BaseAgent):
                 "groupId validation failed: missing group_id in session metadata"
             )
 
-        # GUARDRAIL: o group_id é interpolado em f-string no sql_validator.
+        # GUARDRAIL: o group_id é interpolado em f-string no prompt e no SQL.
         # Só segue adiante como UUID canônico, nunca como o valor cru.
         try:
             group_id = validate_group_id(group_id)

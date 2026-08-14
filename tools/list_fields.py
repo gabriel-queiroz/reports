@@ -1,40 +1,28 @@
 """Tool for listing available fields for a data domain.
 
-Uses schema.md as the source of truth via LLM extraction to ensure
-fields stay synchronized with actual schema documentation.
+Monta a lista a partir do catálogo (`schema.md`), tabela a tabela, usando a
+coluna **Exibição**. Antes esta tool devolvia o `schema.md` **inteiro** a cada
+chamada e pedia para o LLM extrair os campos: ~44k caracteres por chamada, e a
+lista saía diferente a cada vez.
 """
 
 import logging
-from pathlib import Path
 from typing import Literal
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
+
+from domain.agents.reports_b2b.catalog import find_table
+from domain.agents.reports_b2b.schema_extractor import extract_tables_by_domain
 
 logger = logging.getLogger(__name__)
 
 # Domains reference for tool input validation
 VALID_DOMAINS = Literal["colaboradores", "recargas", "financeiro"]
 
-DOMAIN_MARKERS = {
-    "colaboradores": "## 7. Employee (Colaboradores)",
-    "recargas": "## 4. iFood Benefits Recharges (Recargas)",
-    "financeiro": (
-        "## 5. Receivable Assets (Ativos a Receber), "
-        "## 6. Chargeback (Estornos), "
-        "## 9. Company Tax Invoice (Notas Fiscais)"
-    ),
-}
-
-
-def _get_schema_content() -> str:
-    """Load schema.md content."""
-    schema_path = Path(__file__).parent.parent / "data" / "schema.md"
-    try:
-        return schema_path.read_text(encoding="utf-8")
-    except Exception as e:
-        logger.error("Failed to load schema.md: %s", e)
-        return ""
+# O STRUCT inteiro nunca é campo de relatório — só os caminhos de dentro dele,
+# que já vêm listados como colunas próprias no catálogo.
+_TIPOS_NAO_EXIBIVEIS = {"STRUCT"}
 
 
 class ListFieldsInput(BaseModel):
@@ -47,25 +35,34 @@ class ListFieldsInput(BaseModel):
 def list_fields(domain: VALID_DOMAINS) -> str:
     """Lists available fields for a specific data domain.
 
-    Returns the schema documentation so the ReAct agent can extract the
-    user-facing fields using the ``Exibição`` column.
+    Returns the user-facing field names (``Exibição`` column) grouped by table.
     """
     logger.info("list_fields called for domain: %s", domain)
 
-    schema_content = _get_schema_content()
-    if not schema_content:
-        return (
-            f"Erro ao carregar schema. Não foi possível listar os campos para {domain}."
-        )
+    tabelas = extract_tables_by_domain().get(domain, [])
+    if not tabelas:
+        return f"Não há domínio '{domain}' no catálogo."
 
-    marker = DOMAIN_MARKERS.get(domain, "")
+    blocos = []
+    for caminho in tabelas:
+        tabela = find_table(caminho)
+        if tabela is None:
+            continue
 
-    return f"""Aqui está a documentação do schema para o domínio **{domain}**:
+        campos = [
+            f"- {coluna.display}"
+            for coluna in tabela.columns
+            if coluna.display and coluna.type.upper() not in _TIPOS_NAO_EXIBIVEIS
+        ]
+        if campos:
+            blocos.append(f"**{tabela.title}**\n" + "\n".join(campos))
 
-<schema_documentation>
-{schema_content}
-</schema_documentation>
+    if not blocos:
+        return f"Não há campos catalogados para o domínio '{domain}'."
 
-Use a seção {marker} para montar a lista de campos disponíveis para "{domain}".
-Use APENAS a coluna **Exibição** das tabelas (ex.: "Colaborador (ID)", "Nome", "Email").
-NÃO use a coluna "Alias PT-BR" nem nomes técnicos de colunas (ex.: id_colaborador, data_criacao)."""
+    return (
+        f"Campos disponíveis no domínio **{domain}**:\n\n"
+        + "\n\n".join(blocos)
+        + "\n\nApresente estes nomes ao usuário exatamente como estão aqui. "
+        "Não invente campos e não mostre nomes técnicos de colunas."
+    )

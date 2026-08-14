@@ -9,7 +9,7 @@ TABLE_TO_DOMAIN = {
     "employee": "colaboradores",
     "ifood_benefits_recharges": "recargas",
     # chargeback é financeiro (estornos), alinhado ao TABLE_RELATIONSHIPS do
-    # sql_validator e à descrição de domínios do agente
+    # catálogo e à descrição de domínios do agente
     "chargeback": "financeiro",
     "company_tax_invoice": "financeiro",
     "receivable_assets": "financeiro",

@@ -39,9 +39,13 @@ from domain.agents.reports_b2b.catalog import (
     is_declared_join,
 )
 from domain.agents.reports_b2b.guardrails import validate_group_id
-from domain.agents.reports_b2b.sql_validator import QueryNotAllowedError
 
 DIALECT = "databricks"
+
+# Teto de linhas do relatório. Era só uma instrução no prompt — quando o LLM
+# esquecia, nada segurava; quando lembrava, o CSV vinha truncado sem ninguém
+# avisar o usuário. Agora o guard garante o LIMIT e a tool avisa.
+MAX_REPORT_ROWS = 1000
 
 # Nós que não podem aparecer em consulta de relatório, em nenhuma profundidade.
 # `Command` é o que o sqlglot devolve para o que ele não sabe analisar — deixar
@@ -62,8 +66,17 @@ _FORBIDDEN_NODES = (
 )
 
 
+class QueryNotAllowedError(Exception):
+    """A query não atende aos requisitos de segurança multi-tenant.
+
+    Vinha do `sql_validator`, que sumiu quando a validação por string acabou.
+    Continua sendo a base dos erros do guard: quem capturava este tipo captura
+    tudo que o guard levanta.
+    """
+
+
 class SqlGuardError(QueryNotAllowedError):
-    """Base dos erros do guard — é um `QueryNotAllowedError` para quem já trata."""
+    """Base dos erros do guard."""
 
 
 class SqlSyntaxError(SqlGuardError):
@@ -124,6 +137,7 @@ def guard_query(sql: str, group_id: str) -> str:
         _enforce_tenant_scope(select, group_id)
 
     _check_group_column_in_output(root)
+    root = _enforce_row_limit(root)
 
     return root.sql(dialect=DIALECT, comments=False)
 
@@ -552,6 +566,19 @@ def _check_group_column_in_output(root) -> None:
                 "`r.company_group.id AS company_group_id`, "
                 "`fa.group_id AS company_group_id`)."
             )
+
+
+def _enforce_row_limit(root):
+    """Garante um `LIMIT` de no máximo `MAX_REPORT_ROWS` na query externa."""
+    limit = root.args.get("limit")
+
+    if limit is not None:
+        declarado = limit.expression
+        if isinstance(declarado, exp.Literal) and not declarado.is_string:
+            if int(declarado.this) <= MAX_REPORT_ROWS:
+                return root
+
+    return root.limit(MAX_REPORT_ROWS)
 
 
 def _outermost_selects(root):

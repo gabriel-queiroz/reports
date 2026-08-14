@@ -7,12 +7,19 @@ Documentação das tabelas Databricks do iFood Benefícios para geração de rel
 > **Este arquivo é a fonte da verdade única do catálogo.** Regras de domínio, partição,
 > filtro multi-tenant e relacionamento vivem aqui — não no prompt nem no código.
 >
-> ⚠️ **Não renumere nem renomeie os headings `## N. Nome`.** Eles são usados como chave
-> literal por `sql_validator.py` (`get_valid_aliases_for_domain`, `extract_fields_from_documentation`)
-> e por `tools/list_fields.py` (`DOMAIN_MARKERS`). Se o texto mudar, a extração de aliases
-> devolve vazio **em silêncio** e a validação passa a aprovar tudo.
+> ⚠️ **Este arquivo é lido por código** (`catalog.py`) — não é só documentação. O que ele
+> extrai de cada seção `## N. Nome`:
 >
-> ⚠️ Use sempre `**Local**:` (o regex de `schema_extractor.py` não reconhece outras variações).
+> - `**Local**: \`caminho\`` → o nome e o caminho da tabela (use sempre esta grafia);
+> - `**Multi-tenant**: …` → a regra de filtro por grupo. As três formas reconhecidas são
+>   "coluna direta \`x\`", "STRUCT embutido — filtrar direto em \`x.y\`" e
+>   "Exige \`INNER JOIN tabela alias ON …\` e filtro em \`alias.coluna\`";
+> - a tabela markdown de colunas, com `Coluna | Tipo | Alias PT-BR | Exibição` nas quatro
+>   primeiras posições;
+> - a seção `RELACIONAMENTOS`, no formato `tabela.coluna ──> tabela.coluna`.
+>
+> Se a linha `**Multi-tenant**` de uma tabela deixar de ser reconhecida, a tabela sai da
+> allowlist e **para de ser consultável** — falha fechada, e `tests/test_catalog.py` acusa.
 
 ---
 

@@ -2,7 +2,7 @@
 
 Duas entradas cruzam a fronteira do agente e acabam interpoladas em texto:
 
-- `group_id`: vai para `f"... = '{group_id}'"` no `sql_validator`. Precisa ser
+- `group_id`: vai para `f"... = '{group_id}'"` na cláusula de tenant. Precisa ser
   um UUID; é o único caminho de SQL injection literal do fluxo.
 - `pergunta`: vai para dentro de `<pergunta>…</pergunta>` no prompt de geração
   de SQL. Precisa ser tratada como dado, sem poder fechar a tag e virar

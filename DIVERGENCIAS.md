@@ -10,17 +10,17 @@ daqui — está aplicado no `schema.md` e registrado nos commits.
 
 ## 1. Correções de código
 
-Não dependem de confirmação de ninguém — são consequência do que já foi decidido.
+✅ **Resolvidas** — e o mecanismo que as gerava foi embora junto. As regras de multi-tenant,
+as colunas e as chaves de JOIN não são mais listas paralelas em Python: o `catalog.py` lê tudo
+do `schema.md`, então corrigir o catálogo já corrige o código. O `sql_validator.py`, onde
+essas listas viviam (`TABLE_RELATIONSHIPS`, `_has_valid_group_id_filter`,
+`_financeiro_group_filter_clause`), não existe mais.
+
+Continua valendo uma pendência, agora com outro endereço:
 
 | Onde | O quê |
 |------|-------|
-| `sql_validator.py:361-370` | `_has_valid_group_id_filter` deve aceitar `group_id` puro também para `chargeback` e `company_tax_invoice` (hoje só para `financial_account`/`financial_transaction`), senão rejeita filtro correto |
-| `sql_validator.py:159-160` | `TABLE_RELATIONSHIPS["financeiro"]`: mover `chargeback` e `company_tax_invoice` de `tables` para `tables_with_direct_group_id` |
-| `sql_validator.py:375-391` | `_financeiro_group_filter_clause` deve emitir `group_id = '<uuid>'` para as duas, em vez do filtro via alias de `companies` |
-| `schema_extractor.py:12` | `chargeback` está mapeada para `recargas`; o domínio dela precisa ser decidido (hoje diverge do `TABLE_RELATIONSHIPS`) |
-| `schema_extractor.py:10,17` | Remover `mv_employee_config` e `anticipation` do `TABLE_TO_DOMAIN` — confirmado que não existem |
-| `sql_validator.py:139` | Remover `mv_employee_config` de `TABLE_RELATIONSHIPS["colaboradores"]["tables"]` pelo mesmo motivo |
-| `sql_validator.py:563-579` e `tools/list_fields.py:19-27` | Quando `chargeback_employee` for confirmada, incluir `"## 8. Chargeback Employee"` nos mapas de domínio — sem isso os aliases dela não são validados |
+| `data/schema.md` (seção 8) e `schema_extractor.py` (`TABLE_TO_DOMAIN`) | Quando `chargeback_employee` for confirmada, escrever a linha `**Multi-tenant**` dela de forma reconhecível e mapear a tabela para um domínio. Enquanto isso não acontecer, o guard a mantém **fora** da allowlist — que é o comportamento desejado |
 
 ---
 

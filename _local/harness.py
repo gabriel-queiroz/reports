@@ -78,11 +78,11 @@ def main() -> int:
     from domain.agents.reports_b2b.schema_extractor import (
         get_all_tables_for_sql_generation,
     )
-    from domain.agents.reports_b2b.sql_validator import GROUP_ID_FIELD_MAPPING
-
-    campo = GROUP_ID_FIELD_MAPPING.get(args.dominio, "companies.company_group_id")
     sistema = sql_system_prompt(
-        restricao_group_id=f"Query MUST filter by {campo} = '{args.group_id}'",
+        restricao_group_id=(
+            f"Toda query DEVE filtrar pelo grupo '{args.group_id}', usando a "
+            f"coluna de grupo da própria tabela consultada."
+        ),
         documentacao_tabelas=(_RAIZ / "data" / "schema.md").read_text(encoding="utf-8"),
         group_id=args.group_id,
     )
