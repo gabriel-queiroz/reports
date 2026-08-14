@@ -108,14 +108,15 @@ vez quando a fase 5 tirar o último `except InvalidFieldsError`.
 
 ---
 
-## Fase 4 — Fazer o retry funcionar
+## ✅ Fase 4 — Fazer o retry funcionar
 
-- [ ] Realimentar o erro do validador como mensagem para o LLM. Hoje o `continue` do
-      `generate_query_tool.py` reinvoca **o prompt idêntico** — o retry é decorativo.
-- [ ] `temperature=0` (hoje 0.2).
-- [ ] Subir `max_tokens` (hoje 1024): relatório com muitos campos trunca o structured output,
-      e o erro chega ao usuário parecendo alucinação.
-- [ ] Uniformizar: `validate_mandatory_joins` levanta sem retry, as outras duas tentam duas vezes.
+- [x] O erro do guard volta como mensagem para o LLM, junto com a query rejeitada. Vai como
+      turno de `user`: o structured output ocupa o turno do assistente.
+- [x] `temperature=0` — geração de SQL não se beneficia de variedade, e determinismo é o que
+      torna o golden set (fase 6) capaz de medir mudança de prompt.
+- [x] `max_tokens` de 1024 → 4096.
+- [x] Uniformizado: tudo passa pelo mesmo `SqlGuardError` e pelo mesmo `MAX_SQL_ATTEMPTS`.
+      Não existe mais validação que levanta sem retry nem retry que reenvia o prompt idêntico.
 
 ---
 

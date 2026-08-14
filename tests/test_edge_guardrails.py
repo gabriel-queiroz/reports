@@ -15,74 +15,12 @@ from domain.agents.reports_b2b.guardrails import (
     InvalidGroupIdError,
     InvalidQuestionError,
 )
-from domain.agents.reports_b2b.report_generator.tools import generate_query_tool
 from domain.agents.reports_b2b.report_generator.tools.generate_query_tool import (
     _generate_sql_internal,
 )
 from domain.agents.reports_b2b.tools.execute_query import execute_query
 
 GRUPO = "550e8400-e29b-41d4-a716-446655440000"
-
-SQL_ACEITO = (
-    "SELECT c.company_name AS nome_empresa, "
-    "c.company_group_id AS company_group_id, "
-    "COUNT(*) AS total_colaboradores "
-    "FROM main.ifoodoffice_management.employee e "
-    "INNER JOIN fintech_companies.companies c ON e.company_id = c.company_id "
-    "WHERE e.deleted = false "
-    "GROUP BY c.company_name, c.company_group_id "
-    "LIMIT 1000"
-)
-
-
-class _LLMEstruturado:
-    """Imita `llm.with_structured_output(Schema)`, guardando o que recebeu."""
-
-    def __init__(self, schema, sql, chamadas):
-        self._schema = schema
-        self._sql = sql
-        self._chamadas = chamadas
-
-    def invoke(self, mensagens):
-        self._chamadas.append(mensagens)
-        return self._schema(sql=self._sql)
-
-
-class _LLM:
-    def __init__(self, sql, chamadas):
-        self._sql = sql
-        self._chamadas = chamadas
-
-    def with_structured_output(self, schema):
-        return _LLMEstruturado(schema, self._sql, self._chamadas)
-
-
-class ProviderEspiao:
-    """Provider de LLM que registra os prompts em vez de chamar modelo algum."""
-
-    def __init__(self, sql=SQL_ACEITO):
-        self.chamadas: list = []
-        self._sql = sql
-
-    def create_llm(self, **_kwargs):
-        return _LLM(self._sql, self.chamadas)
-
-    @property
-    def prompt_do_usuario(self) -> str:
-        """Texto da última mensagem `user` enviada ao modelo."""
-        papel, conteudo = self.chamadas[-1][1]
-        assert papel == "user"
-        return conteudo
-
-
-@pytest.fixture
-def provider():
-    # `_generate_sql_internal` guarda o LLM num global; zera antes e depois
-    # para um teste não herdar o stub do outro.
-    generate_query_tool._llm_instance = None
-    espiao = ProviderEspiao()
-    yield espiao
-    generate_query_tool._llm_instance = None
 
 
 # ------------------------------------------------- _generate_sql_internal --
@@ -103,7 +41,7 @@ def test_group_id_entra_no_prompt_em_forma_canonica(provider):
         "colaboradores ativos", "colaboradores", GRUPO.upper(), provider
     )
 
-    prompt = provider.prompt_do_usuario
+    prompt = provider.prompt_do_usuario()
     assert GRUPO in prompt
     assert GRUPO.upper() not in prompt
 
@@ -117,7 +55,7 @@ def test_injecao_na_pergunta_nao_fecha_a_tag(provider):
         provider,
     )
 
-    prompt = provider.prompt_do_usuario
+    prompt = provider.prompt_do_usuario()
     assert prompt.count("<pergunta>") == 1
     assert prompt.count("</pergunta>") == 1
     # o texto do ataque continua dentro da região de dados

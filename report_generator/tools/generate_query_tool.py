@@ -29,6 +29,11 @@ from domain.infra.genplat.genplat_provider import GenplatProvider
 
 logger = logging.getLogger(__name__)
 
+# Tentativas de geração de SQL. A partir da segunda, o LLM recebe o erro da
+# tentativa anterior — antes disso, todas as validações tentavam duas vezes com
+# exatamente o mesmo prompt.
+MAX_SQL_ATTEMPTS = 2
+
 
 class GenerateSQLInput(BaseModel):
     """Input schema for SQL generation tool."""
@@ -69,16 +74,39 @@ _tabelas_doc: str | None = None
 
 
 def _initialize_llm(genplat_provider: GenplatProvider) -> ChatOpenAI:
-    """Initialize the LLM instance (lazy initialization)."""
+    """Initialize the LLM instance (lazy initialization).
+
+    `temperature=0`: geração de SQL não se beneficia de variedade — a mesma
+    pergunta deve dar a mesma query, e é isso que torna o golden set (fase 6)
+    capaz de medir mudança de prompt.
+
+    `max_tokens` alto: relatório com muitos campos trunca o structured output,
+    e o SQL cortado chega ao usuário parecendo alucinação.
+    """
     global _llm_instance, _genplat_provider
     if _llm_instance is None:
         _genplat_provider = genplat_provider
         _llm_instance = genplat_provider.create_llm(
             model="gpt-4.1",
-            temperature=0.2,
-            max_tokens=1024,
+            temperature=0,
+            max_tokens=4096,
         )
     return _llm_instance
+
+
+def _correction_message(rejected_sql: str, error: SqlGuardError) -> str:
+    """A mensagem de correção que realimenta o LLM na próxima tentativa.
+
+    Vai como turno de `user` (e não de `assistant`) de propósito: o structured
+    output ocupa o turno do assistente, e nem todo provider aceita um turno de
+    assistente avulso no meio.
+    """
+    return (
+        "A query abaixo foi REJEITADA pela validação. Corrija o que o erro "
+        "aponta e devolva a query completa e corrigida — não explique.\n\n"
+        f"Query rejeitada:\n{rejected_sql}\n\n"
+        f"Motivo da rejeição ({type(error).__name__}):\n{error}"
+    )
 
 
 def _load_schema() -> str:
@@ -181,19 +209,19 @@ def _generate_sql_internal(
     llm = _initialize_llm(genplat_provider)
     llm_with_struct = llm.with_structured_output(GeneratedQuery)
 
-    # Attempt SQL generation with automatic retry if filter is missing
-    max_attempts = 2
-    for attempt in range(1, max_attempts + 1):
+    # A conversa cresce a cada tentativa: o erro do guard entra como mensagem,
+    # senão o retry reinvoca o prompt idêntico e só gasta uma chamada de LLM.
+    messages = [("system", sql_system), ("user", sql_user)]
+
+    for attempt in range(1, MAX_SQL_ATTEMPTS + 1):
         log.log_information(
             "Generating SQL with LLM",
             domain=domain,
             attempt=attempt,
-            max_attempts=max_attempts,
+            max_attempts=MAX_SQL_ATTEMPTS,
         )
 
-        response: GeneratedQuery = llm_with_struct.invoke(
-            [("system", sql_system), ("user", sql_user)]
-        )
+        response: GeneratedQuery = llm_with_struct.invoke(messages)
         sql = response.sql
 
         log.log_information(
@@ -221,18 +249,19 @@ def _generate_sql_internal(
                 "AST guard rejected the query",
                 domain=domain,
                 attempt=attempt,
-                max_attempts=max_attempts,
+                max_attempts=MAX_SQL_ATTEMPTS,
                 reason=type(e).__name__,
                 error=str(e),
             )
-            if attempt < max_attempts:
+            if attempt < MAX_SQL_ATTEMPTS:
+                messages.append(("user", _correction_message(sql, e)))
                 continue
 
             log.log_error(
                 "SQL generation failed after all attempts",
                 e,
                 domain=domain,
-                max_attempts=max_attempts,
+                max_attempts=MAX_SQL_ATTEMPTS,
             )
             raise
 
