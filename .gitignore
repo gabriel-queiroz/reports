@@ -8,3 +8,5 @@ venv/
 *:Zone.Identifier
 
 .claude/settings.local.json
+
+.venv/
