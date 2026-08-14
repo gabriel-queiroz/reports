@@ -1,12 +1,26 @@
 # Plano de trabalho — agente de relatórios B2B
 
 Ordem de execução para o que falta. Cada fase é independente o suficiente para virar um PR.
-As fases 1 a 5 não dependem de ninguém de fora; as 6 a 8 dependem do time de dados ou do
-Reports Service.
+As fases 1 a 5 não dependem de ninguém de fora — **estão fechadas**; as 6 a 8 dependem do time
+de dados ou do Reports Service.
 
 **Princípio que guiou tudo até aqui:** o `data/schema.md` é a fonte da verdade única. Prompt e
 código **leem** o catálogo, não mantêm cópia própria. Toda vez que essa regra foi violada,
 apareceu divergência.
+
+**Onde a segurança do SQL vive agora:** `guardrails.py` (borda), `catalog.py` (o que o
+`schema.md` diz) e `sql_guard.py` (o que a AST tem de cumprir). Os três são código do agente,
+sem dependência de infra da empresa, e viajam junto com ele.
+
+## Como levar para o projeto principal
+
+1. Copiar os arquivos do agente (raiz `.py`, `data/`, `report_generator/`, `tools/`,
+   `reports_react_agent/`) para `domain/agents/reports_b2b/` — os imports absolutos já são os
+   de produção e não mudam.
+2. Copiar `tests/` junto. O único ponto de contato com este repositório é o `try/except` do
+   `tests/conftest.py`, que vira no-op quando o `domain` real existe.
+3. Adicionar **`sqlglot`** às dependências.
+4. Deixar `_local/` para trás — é andaime.
 
 ---
 
@@ -23,9 +37,11 @@ apareceu divergência.
 | ✅ | Structs documentados por inteiro (`order_info`, `order_item_info`, `commercial_address`) |
 | ✅ | Validador alinhado ao catálogo: filtro direto por `group_id` em chargeback e notas fiscais |
 | ✅ | `<pergunta>` marcada como dado, não instrução |
+| ✅ | Fases 1 a 5 (abaixo): guardrails de borda, guard de AST, validação de coluna, retry com realimentação e a limpeza |
 
 Resultado: prompt renderizado saiu de ~48,9k para ~44k caracteres, com muito mais conteúdo
-correto dentro.
+correto dentro. A validação por string virou AST alimentada pelo catálogo, com 143 testes —
+cada bug conhecido virou um caso de regressão.
 
 ---
 
@@ -148,8 +164,13 @@ vez quando a fase 5 tirar o último `except InvalidFieldsError`.
 - [ ] Conjunto de perguntas reais → SQL esperado, rodando os validadores em CI.
 
 Enquanto não houver `EXPLAIN` nem status de report voltando, **esta é a única forma de saber se
-uma mudança de prompt melhorou ou piorou a alucinação.** Sem ela, as fases 3 e 4 são feitas no
-escuro.
+uma mudança de prompt melhorou ou piorou a alucinação.**
+
+Metade da infraestrutura já está de pé: `tests/` roda em CI, o `temperature=0` torna a geração
+repetível e o `ProviderEspiao` do `conftest.py` fixa a resposta do LLM por tentativa. O que
+falta é o insumo que só o time tem — as **perguntas reais** e o SQL que se espera delas. Hoje
+os testes cobrem o guard (SQL de entrada → veredito); o golden set cobre o degrau de cima
+(pergunta → SQL).
 
 ---
 
