@@ -12,14 +12,18 @@ O que este módulo garante, nesta ordem:
 2. é **um** statement, e é `SELECT` (ou `WITH`/`UNION` de selects);
 3. nenhum nó de DML/DDL em lugar nenhum da árvore;
 4. toda tabela referenciada está na allowlist do catálogo (`schema.md`);
-5. **todo escopo** que lê uma tabela base tem o predicado de tenant no topo do
+5. toda coluna existe na tabela em que foi citada, e cada `JOIN` usa uma chave
+   declarada no catálogo;
+6. **todo escopo** que lê uma tabela base tem o predicado de tenant no topo do
    `WHERE`, com o UUID da sessão — injetado via AST quando faltar;
-6. o `SELECT` externo expõe `company_group_id` como coluna de saída;
-7. o SQL devolvido é **regerado a partir da AST**, nunca a string do LLM.
+7. o `SELECT` externo expõe `company_group_id` como coluna de saída;
+8. o SQL devolvido é **regerado a partir da AST**, nunca a string do LLM.
 
 A regra de tenant de cada tabela vem do `catalog`, que a lê do `schema.md`.
 Nada aqui é hardcoded por tabela.
 """
+
+from difflib import get_close_matches
 
 import sqlglot
 from sqlglot import exp
@@ -30,7 +34,9 @@ from domain.agents.reports_b2b.catalog import (
     STRUCT,
     Table,
     allowed_tables,
+    declared_joins_between,
     find_table,
+    is_declared_join,
 )
 from domain.agents.reports_b2b.guardrails import validate_group_id
 from domain.agents.reports_b2b.sql_validator import QueryNotAllowedError
@@ -72,6 +78,18 @@ class TableNotAllowedError(SqlGuardError):
     """Tabela fora do catálogo (ou sem caminho multi-tenant confirmado)."""
 
 
+class ColumnNotFoundError(SqlGuardError):
+    """Coluna que não existe na tabela — alucinação de campo."""
+
+
+class AliasAsColumnError(SqlGuardError):
+    """Alias PT-BR usado onde o SQL exige a coluna física."""
+
+
+class JoinKeyError(SqlGuardError):
+    """JOIN por uma chave que o catálogo não declara."""
+
+
 class TenantFilterError(SqlGuardError):
     """Não há como amarrar o escopo ao grupo da sessão."""
 
@@ -101,6 +119,8 @@ def guard_query(sql: str, group_id: str) -> str:
     _check_tables_are_allowed(root)
 
     for select in root.find_all(exp.Select):
+        _check_scope_columns(select)
+        _check_join_keys(select)
         _enforce_tenant_scope(select, group_id)
 
     _check_group_column_in_output(root)
@@ -174,7 +194,218 @@ def _qualified_name(table: exp.Table) -> str:
     return ".".join(part for part in (table.catalog, table.db, table.name) if part)
 
 
-# --------------------------------------------------- 5: predicado de tenant --
+# ------------------------------------------ 5: colunas e chaves de JOIN --
+
+
+def _check_scope_columns(select: exp.Select) -> None:
+    """Toda coluna citada existe — e existe na tabela em que foi citada.
+
+    Escopo que enxerga CTE ou subquery é pulado: não dá para saber quais
+    colunas elas expõem sem resolver o SELECT de dentro, que já é validado
+    por conta própria.
+    """
+    if not _sources_are_transparent(select):
+        return
+
+    aliases = _visible_aliases(select)
+    if not aliases:
+        return
+
+    # Alias de saída pode ser usado em GROUP BY/ORDER BY/HAVING — o Spark
+    # resolve. O que não pode é o alias aparecer sem ter sido declarado.
+    output_aliases = {
+        item.alias.lower() for item in select.expressions if isinstance(item, exp.Alias)
+    }
+    scope_tables = list(dict.fromkeys(aliases.values()))
+
+    # Coluna sem qualificador só pode ser cobrada quando todos os escopos
+    # visíveis são tabelas do catálogo; com um CTE acima, ela pode vir de lá.
+    strict = _chain_is_transparent(select)
+
+    for column in _scope_columns(select):
+        if isinstance(column.this, exp.Star):
+            continue
+
+        table, path = _resolve_column(column, aliases)
+        if table is not None:
+            _assert_column_exists(path, [table])
+        elif strict and path.lower() not in output_aliases:
+            _assert_column_exists(path, scope_tables)
+
+
+def _assert_column_exists(path: str, tables: list[Table]) -> None:
+    if any(table.has_column(path) for table in tables):
+        return
+
+    # o erro mais comum: Alias PT-BR usado como se fosse a coluna física
+    for table in tables:
+        real = table.column_for_alias(path)
+        if real is not None:
+            raise AliasAsColumnError(
+                f"`{path}` é o Alias PT-BR de `{table.name}.{real.name}`, não uma "
+                f"coluna. No SELECT use `{table.name}.{real.name} AS {path}`; em "
+                f"WHERE, JOIN e GROUP BY use a coluna física `{real.name}`."
+            )
+
+    onde = ", ".join(f"`{table.name}`" for table in tables)
+    raise ColumnNotFoundError(
+        f"A coluna `{path}` não existe em {onde}.{_suggestion(path, tables)}"
+    )
+
+
+def _suggestion(path: str, tables: list[Table]) -> str:
+    """"Você quis dizer…" — com o alias PT-BR junto, que é o que confunde."""
+    candidates: dict[str, Table] = {}
+    for table in tables:
+        for column in table.columns:
+            candidates.setdefault(column.name, table)
+            if column.alias:
+                candidates.setdefault(column.alias, table)
+
+    matches = get_close_matches(path, list(candidates), n=1, cutoff=0.6)
+    if not matches:
+        return ""
+
+    match = matches[0]
+    table = candidates[match]
+    real = table.column_for_alias(match)
+    if real is not None:
+        return (
+            f" Você quis dizer `{real.name}`, cujo alias é `{real.alias}`? "
+            f"(em `{table.name}`)"
+        )
+    return f" Você quis dizer `{table.name}.{match}`?"
+
+
+def _check_join_keys(select: exp.Select) -> None:
+    """O `ON` liga as tabelas por onde o catálogo manda ligar."""
+    aliases = _visible_aliases(select)
+
+    for join in select.args.get("joins") or []:
+        condition = join.args.get("on")
+        if condition is None:  # CROSS JOIN / USING — nada para conferir
+            continue
+
+        pairs = []
+        for conjunct in _top_level_conjuncts(condition):
+            if not isinstance(conjunct, exp.EQ):
+                continue
+            left, right = conjunct.this, conjunct.expression
+            if not (isinstance(left, exp.Column) and isinstance(right, exp.Column)):
+                continue
+
+            left_table, left_path = _resolve_column(left, aliases)
+            right_table, right_path = _resolve_column(right, aliases)
+            if left_table is None or right_table is None:
+                continue
+            if left_table.name == right_table.name:
+                continue
+
+            pairs.append(
+                ((left_table.name, left_path), (right_table.name, right_path))
+            )
+
+        if pairs and not any(is_declared_join(left, right) for left, right in pairs):
+            raise JoinKeyError(_join_key_message(pairs))
+
+
+def _join_key_message(pairs: list[tuple[tuple[str, str], tuple[str, str]]]) -> str:
+    (first_table, _), (second_table, _) = pairs[0]
+    usadas = "; ".join(
+        f"{left[0]}.{left[1]} = {right[0]}.{right[1]}" for left, right in pairs
+    )
+    declaradas = declared_joins_between(first_table, second_table)
+
+    if declaradas:
+        return (
+            f"O JOIN entre `{first_table}` e `{second_table}` usa uma chave que o "
+            f"catálogo não declara ({usadas}). O catálogo declara: "
+            f"{'; '.join(declaradas)}."
+        )
+    return (
+        f"O catálogo não declara ligação direta entre `{first_table}` e "
+        f"`{second_table}` — o JOIN usado ({usadas}) não existe no schema."
+    )
+
+
+def _visible_aliases(select: exp.Select) -> dict[str, Table]:
+    """Aliases de tabela visíveis neste escopo, incluindo os dos escopos acima.
+
+    Subquery correlacionada enxerga o alias de fora; sem isso, uma referência
+    legítima viraria "coluna inexistente".
+    """
+    visible: dict[str, Table] = {}
+
+    scope = select
+    while scope is not None:
+        for table, alias in _base_sources(scope):
+            visible.setdefault(alias, table)
+        scope = _enclosing_select(scope)
+
+    return visible
+
+
+def _sources_are_transparent(select: exp.Select) -> bool:
+    """As fontes **deste** escopo são todas tabelas do catálogo?
+
+    Uma subquery ou um CTE no `FROM` são opacos: só o SELECT de dentro sabe
+    quais colunas expõe — e ele é validado no seu próprio escopo.
+    """
+    return all(
+        isinstance(node, exp.Table) and find_table(_qualified_name(node)) is not None
+        for node in _source_nodes(select)
+    )
+
+
+def _chain_is_transparent(select: exp.Select) -> bool:
+    """Idem, incluindo os escopos que envolvem este."""
+    scope = select
+    while scope is not None:
+        if not _sources_are_transparent(scope):
+            return False
+        scope = _enclosing_select(scope)
+    return True
+
+
+def _scope_columns(select: exp.Select):
+    """Colunas deste escopo — as de subquery pertencem ao escopo de dentro."""
+    for column in select.find_all(exp.Column):
+        if _enclosing_select(column) is select:
+            yield column
+
+
+def _enclosing_select(node) -> exp.Select | None:
+    parent = node.parent
+    while parent is not None:
+        if isinstance(parent, exp.Select):
+            return parent
+        parent = parent.parent
+    return None
+
+
+def _resolve_column(
+    column: exp.Column, aliases: dict[str, Table]
+) -> tuple[Table | None, str]:
+    """Separa a coluna em (tabela, caminho da coluna).
+
+    Devolve `(None, caminho)` quando não há qualificador de tabela — inclui o
+    caso de caminho de STRUCT (`company_group.id`), que é resolvido contra
+    todas as tabelas do escopo.
+    """
+    parts = [part.name for part in column.parts]
+
+    if len(parts) > 1 and parts[0] in aliases:
+        return aliases[parts[0]], ".".join(parts[1:])
+
+    if len(parts) > 1:
+        table = find_table(".".join(parts[:-1]))
+        if table is not None:
+            return table, parts[-1]
+
+    return None, ".".join(parts)
+
+
+# --------------------------------------------------- 6: predicado de tenant --
 
 
 def _enforce_tenant_scope(select: exp.Select, group_id: str) -> None:
@@ -205,8 +436,8 @@ def _enforce_tenant_scope(select: exp.Select, group_id: str) -> None:
         )
 
 
-def _base_sources(select: exp.Select) -> list[tuple[Table, str]]:
-    """Tabelas do catálogo lidas diretamente por este escopo, com seus aliases."""
+def _source_nodes(select: exp.Select) -> list[exp.Expression]:
+    """O que este escopo lê: o `FROM` e cada `JOIN`, sem descer em subquery."""
     nodes = []
 
     # sqlglot 30 guarda o FROM em `from_`; versões anteriores, em `from`.
@@ -216,8 +447,13 @@ def _base_sources(select: exp.Select) -> list[tuple[Table, str]]:
     for join in select.args.get("joins") or []:
         nodes.append(join.this)
 
+    return nodes
+
+
+def _base_sources(select: exp.Select) -> list[tuple[Table, str]]:
+    """Tabelas do catálogo lidas diretamente por este escopo, com seus aliases."""
     sources = []
-    for node in nodes:
+    for node in _source_nodes(select):
         if not isinstance(node, exp.Table):
             continue
         table = find_table(_qualified_name(node))
@@ -302,7 +538,7 @@ def _missing_join_message(sources: list[tuple[Table, str]]) -> str:
     )
 
 
-# ------------------------------------------- 6: coluna de saída do grupo --
+# ------------------------------------------- 7: coluna de saída do grupo --
 
 
 def _check_group_column_in_output(root) -> None:

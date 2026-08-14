@@ -83,7 +83,7 @@ def test_filtro_entra_no_where_e_nao_depois_do_group_by():
 def test_filtro_nao_cai_dentro_de_um_ramo_de_or():
     """`WHERE a OR b` + AND cru vira `a OR (b AND filtro)` — não filtra nada."""
     sql = guard(
-        f"SELECT c.company_group_id AS company_group_id, e.email AS email "
+        f"SELECT c.company_group_id AS company_group_id, e.email_hash AS email "
         f"FROM {EMPLOYEE} e "
         f"INNER JOIN {COMPANIES} c ON e.company_id = c.company_id "
         f"WHERE e.deleted = false OR e.status = 'ACTIVE' "
@@ -97,7 +97,7 @@ def test_filtro_nao_cai_dentro_de_um_ramo_de_or():
 def test_filtro_dentro_de_or_nao_conta_como_filtro_valido():
     """O regex aceitava o UUID em qualquer lugar do texto, inclusive num OR."""
     sql = guard(
-        f"SELECT c.company_group_id AS company_group_id, e.email AS email "
+        f"SELECT c.company_group_id AS company_group_id, e.email_hash AS email "
         f"FROM {EMPLOYEE} e "
         f"INNER JOIN {COMPANIES} c ON e.company_id = c.company_id "
         f"WHERE c.company_group_id = '{GRUPO}' OR e.status = 'ACTIVE' "
@@ -111,8 +111,8 @@ def test_filtro_dentro_de_or_nao_conta_como_filtro_valido():
 
 def test_where_apenas_na_subquery_nao_deixa_o_escopo_externo_sem_filtro():
     sql = guard(
-        f"SELECT x.company_group_id AS company_group_id, x.email AS email FROM ("
-        f"  SELECT c.company_group_id, e.email FROM {EMPLOYEE} e"
+        f"SELECT x.company_group_id AS company_group_id, x.email_hash AS email FROM ("
+        f"  SELECT c.company_group_id, e.email_hash FROM {EMPLOYEE} e"
         f"  INNER JOIN {COMPANIES} c ON e.company_id = c.company_id"
         f"  WHERE e.deleted = false"
         f") x LIMIT 1000"
@@ -125,7 +125,7 @@ def test_where_apenas_na_subquery_nao_deixa_o_escopo_externo_sem_filtro():
 
 def test_predicado_nao_cai_no_on_do_left_join():
     sql = guard(
-        f"SELECT c.company_group_id AS company_group_id, e.email AS email "
+        f"SELECT c.company_group_id AS company_group_id, e.email_hash AS email "
         f"FROM {EMPLOYEE} e "
         f"LEFT JOIN {COMPANIES} c ON e.company_id = c.company_id "
         f"LIMIT 1000"
@@ -267,7 +267,7 @@ def test_tabela_dentro_de_cte_tambem_passa_pela_allowlist():
 def test_employee_sozinho_exige_join_com_companies():
     with pytest.raises(TenantFilterError, match="employee"):
         guard(
-            f"SELECT e.email AS email, e.company_id AS company_group_id "
+            f"SELECT e.email_hash AS email, e.company_id AS company_group_id "
             f"FROM {EMPLOYEE} e WHERE e.deleted = false LIMIT 10"
         )
 

@@ -86,17 +86,25 @@ encolheu de 833 para ~370 linhas.
 
 ---
 
-## Fase 3 — Validação de coluna contra o catálogo
+## ✅ Fase 3 — Validação de coluna contra o catálogo
 
-- [ ] Com a AST, checar por tabela: a coluna existe? é da tabela certa (resolução por alias)?
-      é alias PT-BR usado como coluna física? a chave de JOIN é a declarada?
-- [ ] Erro deve nomear a coluna e sugerir a real ("`id_estorno` não existe em `chargeback`;
-      você quis dizer `id`, cujo alias é `id_estorno`").
-- [ ] Aposentar o `validate_alias_misuse`. Ele reprova query correta (`c.cnpj`,
-      `c.company_group_id` em `GROUP BY` — inclusive o exemplo do próprio prompt) e deixa
-      passar o erro real quando o SQL vem multi-linha.
-- [ ] Remover `validate_fields` e `extract_fields_from_documentation` (código morto que
-      validava a *pergunta*, não o SQL).
+- [x] Com a AST, checar por tabela: a coluna existe? é da tabela certa (resolução por alias)?
+      é alias PT-BR usado como coluna física? a chave de JOIN é a declarada (seção
+      RELACIONAMENTOS do `schema.md`)?
+- [x] Erro nomeia a coluna e sugere a real: "`id_estorno` é o Alias PT-BR de `chargeback.id`,
+      não uma coluna. No SELECT use `chargeback.id AS id_estorno`; em WHERE, JOIN e GROUP BY
+      use a coluna física `id`." Para campo inventado, a sugestão sai por proximidade.
+- [x] `validate_alias_misuse` **aposentado**. Os falsos positivos (`c.cnpj`,
+      `c.company_group_id` em `GROUP BY`) viraram teste de que a query passa, e o erro real
+      em SQL multi-linha virou teste de que agora é pego.
+- [x] `validate_fields` e `extract_fields_from_documentation` removidos.
+
+Alias de saída em `ORDER BY`/`GROUP BY`/`HAVING` continua válido (o Spark resolve) — o que é
+recusado é o alias que não foi declarado no `SELECT`. Escopo que lê CTE ou subquery é pulado:
+quem valida as colunas de lá é o `SELECT` de dentro.
+
+O `sql_validator` ficou com três coisas (duas exceções e o campo citado no prompt) e some de
+vez quando a fase 5 tirar o último `except InvalidFieldsError`.
 
 ---
 

@@ -47,6 +47,15 @@ _JOIN_RE = re.compile(
 
 _ROW_RE = re.compile(r"^\|(?P<celulas>.+)\|\s*$", re.MULTILINE)
 
+# Seção "📊 RELACIONAMENTOS": `tabela.coluna ──> tabela.coluna`, sempre com o
+# nome físico das duas pontas. Linhas terminadas em `(grupo corporativo)` são
+# nota de multi-tenant, não relacionamento entre tabelas.
+_RELATIONSHIP_RE = re.compile(
+    r"^(?P<esq_tabela>\w+)\.(?P<esq_coluna>[\w.]+)\s*──>\s*"
+    r"(?P<dir_tabela>\w+)\.(?P<dir_coluna>[\w.]+)\s*$",
+    re.MULTILINE,
+)
+
 
 @dataclass(frozen=True)
 class TenantRule:
@@ -96,6 +105,16 @@ class Table:
             column.alias.lower() for column in self.columns if column.alias
         )
 
+    def has_column(self, name: str) -> bool:
+        return name.lower() in self.column_names
+
+    def column_for_alias(self, alias: str) -> Column | None:
+        """A coluna física por trás de um Alias PT-BR (`id_estorno` → `id`)."""
+        for column in self.columns:
+            if column.alias.lower() == alias.lower():
+                return column
+        return None
+
 
 def schema_path() -> Path:
     """Caminho do `schema.md` — mesmo arquivo usado para montar o prompt."""
@@ -122,6 +141,47 @@ def allowed_tables() -> dict[str, Table]:
     return {
         name: table for name, table in load_catalog().items() if table.tenant.is_usable
     }
+
+
+@lru_cache(maxsize=1)
+def relationships() -> frozenset[frozenset[tuple[str, str]]]:
+    """Chaves de JOIN declaradas no catálogo, como pares sem direção.
+
+    Cada elemento é `{("employee", "company_id"), ("companies", "company_id")}`.
+    É o que permite dizer que um `ON` liga as tabelas por onde o catálogo manda
+    ligar — e não por uma coluna inventada.
+    """
+    content = schema_path().read_text(encoding="utf-8")
+    return frozenset(
+        frozenset(
+            {
+                (match.group("esq_tabela"), match.group("esq_coluna")),
+                (match.group("dir_tabela"), match.group("dir_coluna")),
+            }
+        )
+        for match in _RELATIONSHIP_RE.finditer(content)
+    )
+
+
+def is_declared_join(left: tuple[str, str], right: tuple[str, str]) -> bool:
+    """O par `(tabela, coluna)` × `(tabela, coluna)` está no catálogo?"""
+    return frozenset({left, right}) in relationships()
+
+
+def declared_joins_between(first: str, second: str) -> list[str]:
+    """Chaves de JOIN declaradas entre duas tabelas, prontas para a mensagem.
+
+    A ordem segue a dos argumentos, para o erro sair na mesma ordem em que as
+    tabelas aparecem na query.
+    """
+    ligacoes = []
+    for par in relationships():
+        if {tabela for tabela, _ in par} != {first, second}:
+            continue
+        esquerda = next(ponta for ponta in par if ponta[0] == first)
+        direita = next(ponta for ponta in par if ponta[0] == second)
+        ligacoes.append(f"{esquerda[0]}.{esquerda[1]} = {direita[0]}.{direita[1]}")
+    return sorted(ligacoes)
 
 
 def find_table(reference: str) -> Table | None:

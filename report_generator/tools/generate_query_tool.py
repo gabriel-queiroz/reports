@@ -23,7 +23,6 @@ from domain.agents.reports_b2b.sql_guard import SqlGuardError, guard_query
 from domain.agents.reports_b2b.sql_validator import (
     GROUP_ID_FIELD_MAPPING,
     QueryNotAllowedError,
-    validate_alias_misuse,
 )
 from domain.core.ioc import get_logger
 from domain.infra.genplat.genplat_provider import GenplatProvider
@@ -203,45 +202,6 @@ def _generate_sql_internal(
             sql_length=len(sql),
             sql=sql,
         )
-
-        # Valida que o LLM não alucionou e usou aliases PT-BR como nomes de campos
-        try:
-            alias_errors = validate_alias_misuse(sql, tables_doc, domain)
-            if alias_errors:
-                log.log_warning(
-                    "Alias misuse validation failed",
-                    domain=domain,
-                    attempt=attempt,
-                    max_attempts=max_attempts,
-                    errors=alias_errors,
-                )
-                if attempt < max_attempts:
-                    # Continua para próxima tentativa (o LLM será chamado novamente)
-                    continue
-                else:
-                    log.log_error(
-                        "SQL generation failed - alias misuse not corrected",
-                        None,
-                        domain=domain,
-                        max_attempts=max_attempts,
-                        errors=alias_errors,
-                    )
-                    raise Exception(
-                        f"SQL gerado com aliases PT-BR usados incorretamente "
-                        f"após {max_attempts} tentativas:\n" + "\n".join(alias_errors)
-                    )
-            log.log_information(
-                "Alias misuse validation passed",
-                domain=domain,
-            )
-        except Exception as e:
-            if "alias misuse not corrected" not in str(e):
-                log.log_warning(
-                    "Alias misuse validation error",
-                    domain=domain,
-                    error=str(e),
-                )
-            raise
 
         # Guard de AST: statement único de leitura, tabelas do catálogo, filtro
         # de tenant injetado e conferido na árvore, coluna de grupo na saída.
