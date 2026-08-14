@@ -38,6 +38,9 @@ class _EstruturadoFake:
         self._sql = sql
         self._logger = logger
 
+    async def ainvoke(self, mensagens: Any) -> Any:
+        return self.invoke(mensagens)
+
     def invoke(self, mensagens: Any) -> Any:
         if self._logger:
             self._logger.log_information(

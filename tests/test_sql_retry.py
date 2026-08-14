@@ -5,6 +5,8 @@ uma segunda chance de sortear a mesma resposta. Agora o erro do guard volta
 como mensagem, e a query rejeitada vai junto.
 """
 
+import asyncio
+
 import pytest
 
 from domain.agents.reports_b2b.report_generator.tools.generate_query_tool import (
@@ -29,7 +31,9 @@ SQL_COM_ALIAS_ERRADO = (
 
 
 def gerar(provider):
-    return _generate_sql_internal("estornos de julho", "financeiro", GRUPO, provider)
+    return asyncio.run(
+        _generate_sql_internal("estornos de julho", "financeiro", GRUPO, provider)
+    )
 
 
 def test_erro_do_guard_volta_como_mensagem_para_o_llm(provider_factory):

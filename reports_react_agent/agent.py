@@ -33,8 +33,6 @@ class ReportsB2bReactAgent(BaseAgent):
     ):
         self.logger = logger
         self.genplat_provider = genplat_provider
-        self.user_id = None  # Will be set during __call__
-        self.group_id = None  # Will be set during __call__
 
         # Hardcoded domain descriptions (single source of truth: schema.md)
         self.dominios_text = (
@@ -63,13 +61,13 @@ class ReportsB2bReactAgent(BaseAgent):
         )
 
     def _build_system_prompt(self, state: dict) -> str:
-        """Build system prompt with group_id injected for multi-tenant security.
+        """Build system prompt with the group_id of THIS state.
 
-        The group_id is set during __call__ and injected into the prompt
-        so the LLM knows which group_id to use when calling execute_query.
+        O group_id sai do `state`, não de atributo de instância: a instância é
+        única no grafo compilado, e com duas sessões concorrentes o prompt de
+        um usuário receberia o UUID do outro.
         """
-        # Use the group_id set during __call__, or fall back to placeholder
-        group_id = self.group_id or "{group_id_not_set}"
+        group_id = state.get("metadata", {}).get("group_id") or "{group_id_not_set}"
         return agent_system_prompt(
             dominios=self.dominios_text,
             group_id=group_id,
@@ -99,7 +97,6 @@ class ReportsB2bReactAgent(BaseAgent):
     async def __call__(self, state: dict) -> Command:
         user_id = str(state.get("user_id", "unknown"))
         session_id = str(state.get("session_id", "unknown"))
-        self.user_id = user_id  # Store for tool context injection
 
         self.logger.log_information(
             "🚀 [ReportsB2bReactAgent] Started",
@@ -146,8 +143,10 @@ class ReportsB2bReactAgent(BaseAgent):
             )
             return self._reject_group_id(f"groupId validation failed: {e}")
 
-        # Store group_id to be used in _build_system_prompt()
-        self.group_id = group_id
+        # O UUID canônico segue no próprio state: é o que `_build_system_prompt`
+        # lê, e é por sessão — nada de atributo de instância, que é
+        # compartilhado por todas as sessões do grafo compilado.
+        state = {**state, "metadata": {**session_metadata, "group_id": group_id}}
 
         self.logger.log_information(
             "✅ [ReportsB2bReactAgent] Security passed - starting ReAct loop",

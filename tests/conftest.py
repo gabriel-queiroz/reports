@@ -41,7 +41,8 @@ class _LLMEstruturado:
         self._respostas = respostas
         self._chamadas = chamadas
 
-    def invoke(self, mensagens):
+    async def ainvoke(self, mensagens):
+        """O agente chama o LLM por `ainvoke` — é assim que a tool não trava o loop."""
         self._chamadas.append(list(mensagens))
         indice = min(len(self._chamadas) - 1, len(self._respostas) - 1)
         return self._schema(sql=self._respostas[indice])

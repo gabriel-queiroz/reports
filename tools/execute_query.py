@@ -127,7 +127,7 @@ async def execute_query(
         )
 
         # Generate SQL with validations (4 layers)
-        sql = _generate_sql_internal(question, domain, group_id, genplat_provider)
+        sql = await _generate_sql_internal(question, domain, group_id, genplat_provider)
 
         logger.log_information(
             "SQL generated in execute_query",

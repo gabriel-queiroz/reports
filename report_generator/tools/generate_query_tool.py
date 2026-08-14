@@ -134,7 +134,7 @@ def _load_tables_doc() -> str:
     return _tabelas_doc
 
 
-def _generate_sql_internal(
+async def _generate_sql_internal(
     question: str,
     domain: str,
     group_id: str,
@@ -142,6 +142,10 @@ def _generate_sql_internal(
 ) -> str:
     """
     Generate SQL from question, validating fields against documentation.
+
+    É `async` porque a chamada do LLM é a parte lenta e roda dentro de uma tool
+    async: com `invoke` síncrono, o event loop ficava parado durante toda a
+    geração, segurando as outras sessões.
 
     Args:
         question: User question
@@ -221,7 +225,7 @@ def _generate_sql_internal(
             max_attempts=MAX_SQL_ATTEMPTS,
         )
 
-        response: GeneratedQuery = llm_with_struct.invoke(messages)
+        response: GeneratedQuery = await llm_with_struct.ainvoke(messages)
         sql = response.sql
 
         log.log_information(

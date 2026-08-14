@@ -21,6 +21,7 @@ permite testar prompt + validadores offline.
 """
 
 import argparse
+import asyncio
 import sys
 import traceback
 from pathlib import Path
@@ -105,8 +106,8 @@ def main() -> int:
     )
 
     try:
-        sql = _generate_sql_internal(
-            args.pergunta, args.dominio, args.group_id, provider
+        sql = asyncio.run(
+            _generate_sql_internal(args.pergunta, args.dominio, args.group_id, provider)
         )
     except Exception as erro:  # noqa: BLE001 — o harness quer ver qualquer falha
         titulo("RESULTADO")
