@@ -50,28 +50,39 @@ não fecha a tag no prompt). 52 testes, `.venv/bin/python -m pytest tests/`.
 
 ---
 
-## Fase 2 — Guard de AST (sqlglot)
+## ✅ Fase 2 — Guard de AST (sqlglot)
 
-Substitui a validação por string. Resolve de uma vez os bugs estruturais que a análise
-inicial levantou e que continuam de pé.
+Substitui a validação por string. Está em `sql_guard.py`, com a allowlist e as regras de
+tenant vindo de `catalog.py`, que lê o `schema.md` — nada de tabela hardcoded no código.
 
-- [ ] Parse com dialeto `databricks`; exigir **um** statement e que seja `SELECT`/`WITH`.
-- [ ] Allowlist de tabelas a partir do catálogo (não hardcoded).
-- [ ] Injetar o predicado de tenant no `WHERE` do escopo externo via AST — o sqlglot
-      parentiza corretamente, matando o bug de precedência (`WHERE a OR b AND filtro`).
-- [ ] Verificar a presença do filtro **no AST**, não por regex: hoje o `_has_valid_group_id_filter`
-      aceita o UUID em qualquer lugar do texto, inclusive dentro de um ramo de `OR`.
-- [ ] Enviar ao Reports Service o SQL **regerado a partir da AST**, não a string do LLM.
+- [x] Parse com dialeto `databricks`; exigir **um** statement e que seja `SELECT`/`WITH`/`UNION`.
+- [x] Allowlist de tabelas a partir do catálogo. Uma tabela sem caminho multi-tenant
+      confirmado (hoje `chargeback_employee`) fica **fora** — falha fechada.
+- [x] Injetar o predicado de tenant via AST em **todo escopo** que lê tabela base (não só o
+      externo): o `where()` do sqlglot parentiza o que já estava lá, matando o bug de
+      precedência (`WHERE a OR b AND filtro`).
+- [x] Verificar a presença do filtro na **conjunção de topo** do `WHERE`, no AST. Filtro
+      dentro de um ramo de `OR` não conta mais como filtro.
+- [x] Enviar ao Reports Service o SQL **regerado a partir da AST** (`comments=False`), não a
+      string do LLM.
 
-**Bugs que isto elimina** (todos reproduzidos em `sql_validator.py`):
-- `_inject_filter_in_query_with_where` procura `LIMIT` primeiro e injeta o `AND` **depois** do
-  `ORDER BY`/`GROUP BY` → SQL inválido. Como o prompt obriga `LIMIT`, é o caminho comum.
-- Injeção dentro de subquery quando o único `WHERE` está lá — query externa fica sem filtro.
-- Predicado caindo dentro do `ON` de um `LEFT JOIN`, onde não filtra nada.
-- `_extract_companies_table_alias` retorna `"ON"` quando o JOIN não tem alias.
-- Nenhuma barreira contra `;`, DML/DDL ou comentário smuggling.
+**Bugs eliminados** (todos viraram teste de regressão em `tests/test_sql_guard.py`):
+- `_inject_filter_in_query_with_where` injetava o `AND` **depois** do `ORDER BY`/`GROUP BY`
+  → SQL inválido. Era o caminho comum, porque o prompt obriga `LIMIT`.
+- Injeção dentro de subquery quando o único `WHERE` estava lá.
+- Predicado caindo dentro do `ON` de um `LEFT JOIN`.
+- `_extract_companies_table_alias` retornando `"ON"` quando o JOIN não tem alias.
+- Domínio `recargas` sem filtro nenhum (a injeção era pulada por inteiro).
+- `;`, DML/DDL e comentário smuggling.
 
-**Validação:** transformar os casos acima em testes de regressão.
+`validate_mandatory_joins`, `validate_company_group_id_in_select` e todo o injetor por string
+(`validate_group_id_present`, `_inject_filter_in_query_with_where`, `_rewrite_query_with_where`,
+`_extract_companies_table_alias`) foram **removidos** — o guard faz tudo isso no AST, e o erro
+de JOIN faltando agora nomeia a tabela de apoio que o catálogo manda usar. O `sql_validator`
+encolheu de 833 para ~370 linhas.
+
+**Dependência nova:** `sqlglot` (Python puro, sem extensão nativa) — precisa entrar no
+`pyproject`/`requirements` do projeto principal junto com o agente.
 
 ---
 

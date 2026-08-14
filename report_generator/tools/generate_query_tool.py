@@ -19,13 +19,11 @@ from domain.agents.reports_b2b.guardrails import (
     validate_group_id,
 )
 from domain.agents.reports_b2b.schema_extractor import get_all_tables_for_sql_generation
+from domain.agents.reports_b2b.sql_guard import SqlGuardError, guard_query
 from domain.agents.reports_b2b.sql_validator import (
     GROUP_ID_FIELD_MAPPING,
     QueryNotAllowedError,
     validate_alias_misuse,
-    validate_company_group_id_in_select,
-    validate_group_id_present,
-    validate_mandatory_joins,
 )
 from domain.core.ioc import get_logger
 from domain.infra.genplat.genplat_provider import GenplatProvider
@@ -131,7 +129,7 @@ def _generate_sql_internal(
     Raises:
         InvalidGroupIdError: If group_id is missing or is not a UUID
         InvalidQuestionError: If the question is empty or too long
-        QueryNotAllowedError: If unable to inject multi-tenant filter
+        SqlGuardError: If the AST guard rejects the query (a QueryNotAllowedError)
     """
     log = get_logger()
 
@@ -206,22 +204,6 @@ def _generate_sql_internal(
             sql=sql,
         )
 
-        # Valida que o SQL inclui os JOINs obrigatórios para
-        # filtrar por company_group_id
-        try:
-            validate_mandatory_joins(sql, domain)
-            log.log_information(
-                "Mandatory JOINs validation passed",
-                domain=domain,
-            )
-        except Exception as e:
-            log.log_warning(
-                "Mandatory JOINs validation failed",
-                domain=domain,
-                error=str(e),
-            )
-            raise
-
         # Valida que o LLM não alucionou e usou aliases PT-BR como nomes de campos
         try:
             alias_errors = validate_alias_misuse(sql, tables_doc, domain)
@@ -261,48 +243,11 @@ def _generate_sql_internal(
                 )
             raise
 
-        # Valida que a coluna company_group_id está presente no SELECT
+        # Guard de AST: statement único de leitura, tabelas do catálogo, filtro
+        # de tenant injetado e conferido na árvore, coluna de grupo na saída.
+        # O que volta é o SQL regerado a partir da AST — não a string do LLM.
         try:
-            select_errors = validate_company_group_id_in_select(sql)
-            if select_errors:
-                log.log_warning(
-                    "company_group_id in SELECT validation failed",
-                    domain=domain,
-                    attempt=attempt,
-                    max_attempts=max_attempts,
-                    errors=select_errors,
-                )
-                if attempt < max_attempts:
-                    continue
-                else:
-                    log.log_error(
-                        "SQL generation failed - company_group_id column not present",
-                        None,
-                        domain=domain,
-                        max_attempts=max_attempts,
-                        errors=select_errors,
-                    )
-                    raise Exception(
-                        "SQL gerado sem a coluna company_group_id no SELECT "
-                        f"após {max_attempts} tentativas:\n" + "\n".join(select_errors)
-                    )
-            log.log_information(
-                "company_group_id in SELECT validation passed",
-                domain=domain,
-            )
-        except Exception as e:
-            if "company_group_id column not present" not in str(e):
-                log.log_warning(
-                    "company_group_id in SELECT validation error",
-                    domain=domain,
-                    error=str(e),
-                )
-            raise
-
-        # Valida que o LLM incluiu o filtro de segurança
-        # multi-tenant (obrigatório)
-        try:
-            sql = validate_group_id_present(sql, group_field, group_id, domain)
+            sql = guard_query(sql, group_id)
             log.log_information(
                 "SQL generated successfully",
                 domain=domain,
@@ -311,24 +256,25 @@ def _generate_sql_internal(
                 sql=sql,
             )
             return sql
-        except QueryNotAllowedError as e:
+        except SqlGuardError as e:
             log.log_warning(
-                "group_id filter validation failed",
+                "AST guard rejected the query",
                 domain=domain,
                 attempt=attempt,
                 max_attempts=max_attempts,
+                reason=type(e).__name__,
                 error=str(e),
             )
             if attempt < max_attempts:
                 continue
-            else:
-                log.log_error(
-                    "SQL generation failed after all attempts",
-                    e,
-                    domain=domain,
-                    max_attempts=max_attempts,
-                )
-                raise
+
+            log.log_error(
+                "SQL generation failed after all attempts",
+                e,
+                domain=domain,
+                max_attempts=max_attempts,
+            )
+            raise
 
 
 @tool(args_schema=GenerateSQLInput)

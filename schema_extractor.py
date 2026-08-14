@@ -1,8 +1,8 @@
 """Extrai domínios e tabelas do schema.md - fonte de verdade única."""
 
-import re
-from pathlib import Path
 from typing import Dict, List
+
+from domain.agents.reports_b2b.catalog import load_catalog
 
 # Mapeamento de nomes de tabelas no schema para domínios
 TABLE_TO_DOMAIN = {
@@ -18,31 +18,14 @@ TABLE_TO_DOMAIN = {
 }
 
 
-def _get_schema_path() -> Path:
-    """Retorna o caminho do schema.md."""
-    return Path(__file__).parent / "data" / "schema.md"
-
-
-def _load_schema_content() -> str:
-    """Carrega o conteúdo do schema.md."""
-    schema_path = _get_schema_path()
-    if not schema_path.exists():
-        raise FileNotFoundError(f"Schema file not found: {schema_path}")
-    return schema_path.read_text(encoding="utf-8")
-
-
 def extract_tables_by_domain() -> Dict[str, List[str]]:
     """
     Extrai todas as tabelas do schema.md organizadas por domínio.
 
-    Procura por padrões:
-    - **Local**: `tabela.caminho`
-    - **Localização**: `tabela.caminho`
+    A leitura do arquivo é a do `catalog` — um parser só para o schema.md.
 
     Retorna um dict com domínios mapeados para suas tabelas.
     """
-    schema_content = _load_schema_content()
-
     # Inicializar resultado com listas vazias
     result: Dict[str, List[str]] = {
         "colaboradores": [],
@@ -50,22 +33,11 @@ def extract_tables_by_domain() -> Dict[str, List[str]]:
         "financeiro": [],
     }
 
-    # Padrão para encontrar Local/Localização com backticks
-    # Captura: **Local**: `main.schema.table`
-    # ou: **Localização:** `main.schema.table`
-    pattern = r"\*\*Local(?:ização)?\*\*:\s*`([^`]+)`"
+    for table in load_catalog().values():
+        domain = TABLE_TO_DOMAIN.get(table.name)
 
-    for match in re.finditer(pattern, schema_content):
-        table_path = match.group(1).strip()
-
-        # Extrair nome da tabela (última parte após o ponto)
-        table_name = table_path.split(".")[-1]
-
-        # Determinar o domínio baseado no nome da tabela
-        domain = TABLE_TO_DOMAIN.get(table_name)
-
-        if domain and table_path not in result[domain]:
-            result[domain].append(table_path)
+        if domain and table.path not in result[domain]:
+            result[domain].append(table.path)
 
     # Garantir que fintech_companies.companies está em todos os domínios
     # (necessário para JOIN com company_group_id)

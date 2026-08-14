@@ -77,11 +77,11 @@ Na primeira execução, com o SQL padrão do modo fake:
 ```
 
 O filtro multi-tenant foi injetado **depois do `GROUP BY`** — SQL inválido — e mesmo assim a
-query foi **aceita** pelos validadores. É o bug do `_inject_filter_in_query_with_where`
-descrito na fase 2 do `PLANO.md`, agora reproduzível com um comando.
+query foi **aceita** pelos validadores. Era o bug do `_inject_filter_in_query_with_where`.
+O mesmo comando hoje devolve o filtro no `WHERE`, antes do `GROUP BY` (fase 2, guard de AST).
 
-Também dá para reproduzir o buraco do domínio `recargas`, onde uma query sem nenhum filtro de
-grupo passa por todas as validações:
+O outro buraco reproduzível era o domínio `recargas`, onde uma query sem filtro de grupo
+passava por todas as validações. Hoje o guard injeta `r.company_group.id`:
 
 ```bash
 .venv/bin/python _local/harness.py "recargas de julho" --dominio recargas \
@@ -89,6 +89,9 @@ grupo passa por todas as validações:
          FROM main.fintech_finance.ifood_benefits_recharges r \
          WHERE r.update_month >= '2026-07' LIMIT 1000"
 ```
+
+Os dois casos viraram teste de regressão em `tests/test_sql_guard.py` — é lá que eles ficam
+travados, não aqui.
 
 ## API — fluxo completo
 
@@ -115,16 +118,19 @@ o suficiente para exercitar o caminho inteiro. Com a chave, é o `gpt-4.1` de ve
 
 ### O que a API mostrou
 
-O SQL que **chegou ao Reports Service** carrega o bug do `GROUP BY`:
+Antes da fase 2, o SQL que **chegava ao Reports Service** carregava o bug do `GROUP BY` —
+ou seja, não era detalhe interno do validador, era o que sairia para execução:
 
 ```sql
 ... GROUP BY c.company_name, c.company_group_id  AND c.company_group_id = '550e…' LIMIT 1000
 ```
 
-Ou seja: não é um detalhe interno do validador, é o que sairia para execução.
+Hoje o `GET /reports` mostra o SQL regerado a partir da AST, com o filtro no lugar certo.
 
-E o guardrail de tenant funciona — `group_id` vazio devolve
-`"groupId validation failed: missing group_id in session metadata"` com `fallback_used: true`.
+O guardrail de tenant funciona nas duas formas: `group_id` vazio devolve
+`"groupId validation failed: missing group_id in session metadata"`, e um `group_id` que não
+é UUID devolve `"groupId validation failed: group_id não é um UUID válido…"` — os dois com
+`fallback_used: true`, sem chamar o LLM.
 
 ## Front (Next.js)
 
