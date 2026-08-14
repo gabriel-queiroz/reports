@@ -1,0 +1,189 @@
+:root {
+  --bg: #0e0f12;
+  --painel: #16181d;
+  --borda: #262a32;
+  --texto: #e6e8ec;
+  --fraco: #8b91a0;
+  --azul: #5b9bff;
+  --verde: #4ec98b;
+  --vermelho: #ff7a7a;
+  --amarelo: #e8c46a;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--texto);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* ------------------------------------------------------------------ topo */
+.topo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--borda);
+}
+.topo h1 { font-size: 15px; margin: 0; font-weight: 600; }
+.pill {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--borda);
+  color: var(--fraco);
+  font-family: var(--mono);
+}
+.pill.ok { color: var(--verde); border-color: #23503c; }
+.pill.fake { color: var(--amarelo); border-color: #4d4225; }
+.pill.off { color: var(--vermelho); border-color: #55292c; }
+.campos { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.campo { display: flex; align-items: center; gap: 6px; }
+.campo label { font-size: 11px; color: var(--fraco); }
+.campo input {
+  background: var(--painel);
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  width: 280px;
+}
+.campo input.curto { width: 130px; }
+
+/* ------------------------------------------------------------------ corpo */
+.corpo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  min-height: 0;
+}
+@media (max-width: 900px) { .corpo { grid-template-columns: 1fr; } }
+
+.coluna { display: flex; flex-direction: column; min-height: 0; }
+.coluna + .coluna { border-left: 1px solid var(--borda); }
+.cabecalho {
+  padding: 10px 20px;
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--fraco);
+  border-bottom: 1px solid var(--borda);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.cabecalho button {
+  background: none;
+  border: 1px solid var(--borda);
+  color: var(--fraco);
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cabecalho button:hover { color: var(--texto); border-color: #3a404b; }
+
+.rolagem { flex: 1; overflow-y: auto; padding: 16px 20px; min-height: 0; }
+
+/* ------------------------------------------------------------------ chat */
+.msg { margin-bottom: 16px; }
+.autor {
+  font-size: 11px;
+  color: var(--fraco);
+  margin-bottom: 4px;
+  font-family: var(--mono);
+}
+.balao { white-space: pre-wrap; word-break: break-word; }
+.msg.user .balao { color: var(--azul); }
+.msg.erro .balao { color: var(--vermelho); }
+.pensando { color: var(--fraco); font-style: italic; }
+
+.entrada {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--borda);
+}
+.entrada input {
+  flex: 1;
+  background: var(--painel);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.entrada input:focus { outline: none; border-color: var(--azul); }
+.entrada button {
+  background: var(--azul);
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 18px;
+  color: #06121f;
+  font-weight: 600;
+  cursor: pointer;
+}
+.entrada button:disabled { opacity: .45; cursor: default; }
+
+.sugestoes { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 20px 12px; }
+.sugestoes button {
+  background: var(--painel);
+  border: 1px solid var(--borda);
+  color: var(--fraco);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sugestoes button:hover { color: var(--texto); border-color: #3a404b; }
+
+/* ------------------------------------------------------- painel de SQL */
+.relatorio {
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.relatorio header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--painel);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fraco);
+}
+.relatorio pre {
+  margin: 0;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.alerta {
+  margin: 0;
+  padding: 8px 12px;
+  background: #2a1e1e;
+  border-top: 1px solid #55292c;
+  color: var(--vermelho);
+  font-size: 12px;
+}
+.vazio { color: var(--fraco); font-size: 13px; }

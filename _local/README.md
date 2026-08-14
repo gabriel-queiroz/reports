@@ -20,7 +20,8 @@ importando `domain.agents.reports_b2b.…`, `domain.core.ioc` e
 | `domain/agents/graph/agent_state.py` | `domain.agents.graph.agent_state` | Campos usados pelo agente |
 | `domain/agents/i18n/pt_br.py` | `domain.agents.i18n.pt_br` | Mensagem de erro |
 | `harness.py` | — | CLI que exercita o fluxo real de geração de SQL |
-| `api.py` | — | API + console web; sobe o subgrafo real e finge ser o Reports Service |
+| `api.py` | — | API; sobe o subgrafo real e finge ser o Reports Service |
+| `web/` | — | Front em Next.js que consome a API |
 
 A ponte merece nota: em vez de copiar os arquivos do agente para dentro de um pacote
 `domain/`, o `__init__.py` aponta o `__path__` para a raiz. Assim existe **uma** cópia do
@@ -110,6 +111,27 @@ Ou seja: não é um detalhe interno do validador, é o que sairia para execuçã
 
 E o guardrail de tenant funciona — `group_id` vazio devolve
 `"groupId validation failed: missing group_id in session metadata"` com `fallback_used: true`.
+
+## Front (Next.js)
+
+```bash
+cd _local/web && npm install     # já instalado
+npm run dev                      # http://localhost:3000 (ou 3001 se ocupada)
+```
+
+Precisa da API rodando em paralelo (`.venv/bin/python _local/api.py`). O `next.config.ts`
+faz proxy de `/agent/*` para `http://127.0.0.1:8000`, então não há CORS envolvido — mude com
+`AGENT_API_URL` se a API subir em outra porta.
+
+Duas colunas: à esquerda a conversa com o agente, à direita **o SQL que foi entregue ao
+Reports Service**, um card por relatório. Em cima dá para trocar `group_id` e `user_id` — é
+assim que se testa o isolamento multi-tenant, inclusive mandando vazio para ver o guardrail
+barrar.
+
+O painel da direita marca em vermelho três coisas que o console detecta sozinho: filtro
+injetado depois de `GROUP BY`/`ORDER BY`, ausência da coluna de saída `company_group_id` e
+ausência de filtro de grupo no `WHERE`. É só heurística de tela — a validação de verdade é a
+do agente —, mas serve para o problema saltar aos olhos em vez de ficar escondido no SQL.
 
 ## Limite conhecido
 
