@@ -13,6 +13,11 @@ from domain.agents.reports_b2b.report_generator.prompts import (
     sql_system_prompt,
     sql_user_prompt,
 )
+from domain.agents.reports_b2b.guardrails import (
+    InvalidGroupIdError,
+    sanitize_question,
+    validate_group_id,
+)
 from domain.agents.reports_b2b.schema_extractor import get_all_tables_for_sql_generation
 from domain.agents.reports_b2b.sql_validator import (
     GROUP_ID_FIELD_MAPPING,
@@ -124,8 +129,8 @@ def _generate_sql_internal(
         Valid SQL to execute
 
     Raises:
-        ValueError: If group_id not provided
-        InvalidFieldsError: If question mentions non-existent fields
+        InvalidGroupIdError: If group_id is missing or is not a UUID
+        InvalidQuestionError: If the question is empty or too long
         QueryNotAllowedError: If unable to inject multi-tenant filter
     """
     log = get_logger()
@@ -136,20 +141,16 @@ def _generate_sql_internal(
         question_length=len(question),
     )
 
-    # Validate group_id was provided
-    if not group_id or not group_id.strip():
-        log.log_error(
-            "group_id missing for SQL generation",
-            ValueError(
-                "group_id is mandatory for multi-tenant security. "
-                "Without data isolation filter, query will be rejected."
-            ),
-            domain=domain,
-        )
-        raise ValueError(
-            "group_id is mandatory for multi-tenant security. "
-            "Without data isolation filter, query will be rejected."
-        )
+    # GUARDRAIL: este é o ponto onde o group_id vira f-string (prompt e, depois,
+    # WHERE do SQL). Daqui para baixo só circula o UUID canônico.
+    try:
+        group_id = validate_group_id(group_id)
+    except InvalidGroupIdError as e:
+        log.log_error("group_id invalid for SQL generation", e, domain=domain)
+        raise
+
+    # A pergunta é interpolada dentro de <pergunta> no prompt do usuário.
+    question = sanitize_question(question)
 
     # Load documentation
     tables_doc = _load_tables_doc()

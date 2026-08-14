@@ -29,20 +29,24 @@ correto dentro.
 
 ---
 
-## Fase 1 — Guardrails de borda
+## ✅ Fase 1 — Guardrails de borda
 
-Barato, isolado, fecha o único caminho de SQL injection literal.
+Barato, isolado, fecha o único caminho de SQL injection literal. Tudo em `guardrails.py`
+— sem dependência de LLM, langchain ou infra, para viajar junto com o agente.
 
-- [ ] Validar `group_id` como UUID (`uuid.UUID(...)`) no `__call__` do agente, **antes** de
-      qualquer f-string. Hoje `sql_validator.py` interpola o valor cru em
-      `f"group_id = '{group_id}'"`.
-- [ ] Recusar `group_id` ausente em vez do default `"unknown"` (`tools/execute_query.py:61`),
-      que hoje gera query para um tenant inexistente e passa pela validação do
+- [x] Validar `group_id` como UUID (`uuid.UUID(...)`) no `__call__` do agente, **antes** de
+      qualquer f-string. O que circula daqui para frente é `str(UUID(...))` — canônico, sem
+      como carregar aspas ou comentário. Mesma validação repetida em `execute_query` e em
+      `_generate_sql_internal`, que é onde o valor de fato vira f-string.
+- [x] Recusar `group_id` ausente em vez do default `"unknown"` (`tools/execute_query.py`),
+      que gerava query para um tenant inexistente e passava pela validação do
       `reports_service`.
-- [ ] Sanitizar a pergunta antes do prompt: limite de tamanho, remoção de caracteres de
-      controle e das sequências que fecham `<pergunta>`.
+- [x] Sanitizar a pergunta antes do prompt: limite de tamanho (4000), remoção de caracteres
+      de controle e invisíveis (Cc/Cf) e das sequências que fecham `<pergunta>`.
 
-**Validação:** teste unitário com `group_id` malformado, vazio e com `' OR '1'='1`.
+**Validação:** `tests/test_guardrails.py` (unidade) e `tests/test_edge_guardrails.py`
+(bordas reais: o LLM não chega a ser chamado com tenant inválido, e o payload de injeção
+não fecha a tag no prompt). 52 testes, `.venv/bin/python -m pytest tests/`.
 
 ---
 

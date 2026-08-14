@@ -32,6 +32,20 @@ código, e o import absoluto do agente continua resolvendo.
 ```bash
 uv venv .venv
 uv pip install --python .venv/bin/python pydantic langchain-core langchain-openai langgraph
+uv pip install --python .venv/bin/python pytest sqlglot
+```
+
+`sqlglot` é dependência do agente (guard de AST); `pytest` é só de desenvolvimento.
+
+## Testes
+
+Ficam em `tests/`, **fora desta pasta**, de propósito: eles testam o agente e vão junto
+com ele para o projeto principal. Importam pelo caminho de produção
+(`domain.agents.reports_b2b.…`); o único ponto de contato com este andaime é o
+`tests/conftest.py`, que só cai em `_local/` quando o `domain` real não existe.
+
+```bash
+.venv/bin/python -m pytest tests/ -q
 ```
 
 ## Uso

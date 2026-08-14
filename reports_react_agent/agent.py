@@ -8,6 +8,10 @@ from langgraph.types import Command
 from domain.agents.base.base_agent import BaseAgent
 from domain.agents.graph.agent_state import AgentState
 from domain.agents.i18n.pt_br import INTERACTION_ERROR_RESPONSE
+from domain.agents.reports_b2b.guardrails import (
+    InvalidGroupIdError,
+    validate_group_id,
+)
 from domain.agents.reports_b2b.report_generator.prompts import agent_system_prompt
 from domain.agents.reports_b2b.tools.execute_query import execute_query
 from domain.agents.reports_b2b.tools.list_fields import list_fields
@@ -71,6 +75,27 @@ class ReportsB2bReactAgent(BaseAgent):
             group_id=group_id,
         )
 
+    @staticmethod
+    def _reject_group_id(error_message: str) -> Command:
+        """Encerra o turno sem chamar o LLM quando o tenant não é confiável."""
+        response = "Missing groupId. Cannot process queries."
+        return Command(
+            goto="__end__",
+            update={
+                "response": response,
+                "messages": [
+                    AIMessage(
+                        content=response,
+                        id="reports_b2b_react_groupid_validation",
+                    )
+                ],
+                "agent_used": "reports_b2b",
+                "current_step": "completed",
+                "error_message": error_message,
+                "fallback_used": True,
+            },
+        )
+
     async def __call__(self, state: dict) -> Command:
         user_id = str(state.get("user_id", "unknown"))
         session_id = str(state.get("session_id", "unknown"))
@@ -104,25 +129,22 @@ class ReportsB2bReactAgent(BaseAgent):
                 user_id=user_id,
                 session_id=session_id,
             )
-            return Command(
-                goto="__end__",
-                update={
-                    "response": "Missing groupId. Cannot process queries.",
-                    "messages": [
-                        AIMessage(
-                            content="Missing groupId. Cannot process queries.",
-                            id="reports_b2b_react_groupid_validation",
-                        )
-                    ],
-                    "agent_used": "reports_b2b",
-                    "current_step": "completed",
-                    "error_message": (
-                        "groupId validation failed: "
-                        "missing group_id in session metadata"
-                    ),
-                    "fallback_used": True,
-                },
+            return self._reject_group_id(
+                "groupId validation failed: missing group_id in session metadata"
             )
+
+        # GUARDRAIL: o group_id é interpolado em f-string no sql_validator.
+        # Só segue adiante como UUID canônico, nunca como o valor cru.
+        try:
+            group_id = validate_group_id(group_id)
+        except InvalidGroupIdError as e:
+            self.logger.log_warning(
+                "❌ [ReportsB2bReactAgent] groupId validation FAILED - not a UUID",
+                user_id=user_id,
+                session_id=session_id,
+                error=str(e),
+            )
+            return self._reject_group_id(f"groupId validation failed: {e}")
 
         # Store group_id to be used in _build_system_prompt()
         self.group_id = group_id

@@ -10,6 +10,12 @@ from pydantic import BaseModel, Field
 from domain.agents.reports_b2b.report_generator.tools.generate_query_tool import (
     _generate_sql_internal,
 )
+from domain.agents.reports_b2b.guardrails import (
+    InvalidGroupIdError,
+    InvalidQuestionError,
+    sanitize_question,
+    validate_group_id,
+)
 from domain.agents.reports_b2b.sql_validator import (
     InvalidFieldsError,
     QueryNotAllowedError,
@@ -58,8 +64,46 @@ async def execute_query(
 
     # Get group_id from metadata and user_id from top-level state
     metadata = state.get("metadata", {})
-    group_id = metadata.get("group_id", "unknown")
     user_id = state.get("user_id", "unknown")
+
+    # GUARDRAIL: sem tenant válido não há consulta. O default "unknown" que
+    # existia aqui gerava query para um grupo inexistente e ainda passava pela
+    # validação do reports_service.
+    try:
+        group_id = validate_group_id(metadata.get("group_id"))
+    except InvalidGroupIdError as e:
+        logger.log_warning(
+            "execute_query blocked: invalid group_id",
+            domain=domain,
+            user_id=user_id,
+            error=str(e),
+        )
+        return json.dumps(
+            {
+                "status": "error",
+                "message": (
+                    "Não foi possível identificar o grupo de empresas desta "
+                    "sessão. A consulta não foi executada."
+                ),
+            },
+            ensure_ascii=False,
+        )
+
+    # GUARDRAIL: a pergunta é dado, não instrução — ela entra dentro de
+    # <pergunta> no prompt de geração de SQL.
+    try:
+        question = sanitize_question(question)
+    except InvalidQuestionError as e:
+        logger.log_warning(
+            "execute_query blocked: invalid question",
+            domain=domain,
+            user_id=user_id,
+            error=str(e),
+        )
+        return json.dumps(
+            {"status": "invalid_question", "message": str(e)},
+            ensure_ascii=False,
+        )
 
     try:
         genplat_provider = GenplatProvider(logger)
