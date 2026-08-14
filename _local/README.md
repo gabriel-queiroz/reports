@@ -16,10 +16,11 @@ importando `domain.agents.reports_b2b.…`, `domain.core.ioc` e
 | `domain/core/config.py` | `domain.core.config` | `settings` para o `reports_service` |
 | `domain/infra/genplat/genplat_provider.py` | `domain.infra.genplat.genplat_provider` | Fala com a **API da OpenAI** no lugar do gateway interno |
 | `domain/agents/reports_b2b/__init__.py` | — | Ponte: aponta `__path__` para a raiz do repo |
-| `domain/agents/base/base_agent.py` | `domain.agents.base.base_agent` | ⚠️ Só o suficiente para importar. **Não** tem o loop ReAct |
+| `domain/agents/base/base_agent.py` | `domain.agents.base.base_agent` | Loop ReAct reimplementado com o mesmo contrato |
 | `domain/agents/graph/agent_state.py` | `domain.agents.graph.agent_state` | Campos usados pelo agente |
 | `domain/agents/i18n/pt_br.py` | `domain.agents.i18n.pt_br` | Mensagem de erro |
 | `harness.py` | — | CLI que exercita o fluxo real de geração de SQL |
+| `api.py` | — | API + console web; sobe o subgrafo real e finge ser o Reports Service |
 
 A ponte merece nota: em vez de copiar os arquivos do agente para dentro de um pacote
 `domain/`, o `__init__.py` aponta o `__path__` para a raiz. Assim existe **uma** cópia do
@@ -74,9 +75,45 @@ grupo passa por todas as validações:
          WHERE r.update_month >= '2026-07' LIMIT 1000"
 ```
 
+## API — fluxo completo
+
+```bash
+uv pip install --python .venv/bin/python fastapi uvicorn httpx
+.venv/bin/python _local/api.py        # http://127.0.0.1:8000
+```
+
+Sobe o **subgrafo real** (`ReportsB2bSubgraph`) e ainda faz o papel do Reports Service, então
+o ciclo fecha sem nada externo: conversa → confirmação → tool → geração de SQL → validadores
+→ SQL entregue. O que seria enviado ao Databricks fica em `GET /reports`.
+
+| Rota | O quê |
+|---|---|
+| `GET /` | console web para conversar com o agente |
+| `POST /chat` | `{message, session_id, group_id, user_id}` |
+| `GET /sessions/{id}` | histórico da sessão |
+| `POST /v1/reports/ai-report` | Reports Service falso — guarda o SQL |
+| `GET /reports` | tudo que o agente mandou executar |
+| `GET /health` | modo do LLM, sessões, relatórios |
+
+Sem `OPENAI_API_KEY` o LLM é roteirizado: pede confirmação e, ao receber "sim", chama a tool —
+o suficiente para exercitar o caminho inteiro. Com a chave, é o `gpt-4.1` de verdade.
+
+### O que a API mostrou
+
+O SQL que **chegou ao Reports Service** carrega o bug do `GROUP BY`:
+
+```sql
+... GROUP BY c.company_name, c.company_group_id  AND c.company_group_id = '550e…' LIMIT 1000
+```
+
+Ou seja: não é um detalhe interno do validador, é o que sairia para execução.
+
+E o guardrail de tenant funciona — `group_id` vazio devolve
+`"groupId validation failed: missing group_id in session metadata"` com `fallback_used: true`.
+
 ## Limite conhecido
 
-O `BaseAgent` daqui **não** implementa o loop ReAct — só permite importar o agente. Testar o
-grafo de ponta a ponta (tools, confirmação com o usuário, `execute_query` chamando o Reports
-Service) exige o `BaseAgent` real ou uma reimplementação fiel. O harness ataca a geração de
-SQL, que é onde estão as fases 2 a 4 do plano.
+O `BaseAgent` daqui é uma **reimplementação**, não o código da empresa. O contrato é o mesmo
+(`_create_llm`, `_build_system_prompt`, `_build_command`, `await agente(state)`), mas detalhes
+do loop real podem divergir — em especial a injeção de `InjectedState`, que aqui é feita por
+inspeção da assinatura da tool, e no projeto principal é o `ToolNode` do langgraph que faz.

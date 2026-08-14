@@ -49,14 +49,81 @@ class _EstruturadoFake:
         return self._schema(sql=self._sql)
 
 
+_GATILHOS_CONFIRMACAO = ("sim", "pode gerar", "confirmo", "confirmado", "gerar")
+
+
 class _LLMFake:
+    """LLM roteirizado. Cobre os três usos do agente: structured output, bind de
+    tools e chamada simples."""
+
     def __init__(self, sql: str, logger: Any = None, **kwargs: Any):
         self._sql = sql
         self._logger = logger
+        self._tools: list[Any] = []
         self.kwargs = kwargs
 
     def with_structured_output(self, schema: Any) -> _EstruturadoFake:
         return _EstruturadoFake(schema, self._sql, self._logger)
+
+    def bind_tools(self, tools: list[Any]) -> "_LLMFake":
+        self._tools = tools
+        return self
+
+    async def ainvoke(self, mensagens: Any) -> Any:
+        return self.invoke(mensagens)
+
+    def invoke(self, mensagens: Any) -> Any:
+        from langchain_core.messages import AIMessage
+
+        ultima_humana = ""
+        ja_chamou_tool = False
+        for m in mensagens:
+            tipo = getattr(m, "type", "")
+            if tipo == "human":
+                ultima_humana = str(getattr(m, "content", ""))
+            if tipo == "tool":
+                ja_chamou_tool = True
+
+        nomes = {t.name for t in self._tools}
+        confirmou = any(g in ultima_humana.lower() for g in _GATILHOS_CONFIRMACAO)
+
+        if "execute_query" in nomes and confirmou and not ja_chamou_tool:
+            if self._logger:
+                self._logger.log_information("LLM fake decidiu chamar execute_query")
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "execute_query",
+                        "args": {
+                            "question": ultima_humana or "relatório solicitado",
+                            "domain": "colaboradores",
+                            "desired_fields": "all",
+                        },
+                        "id": "fake-call-1",
+                    }
+                ],
+            )
+
+        if ja_chamou_tool:
+            return AIMessage(
+                content=(
+                    "Pronto! Seu relatório foi solicitado e será entregue em .csv. "
+                    "(resposta do LLM em modo fake)"
+                )
+            )
+
+        return AIMessage(
+            content=(
+                "📊 **Resumo do Relatório**\n\n"
+                "**Domínio:** Colaboradores\n"
+                "**Período:** não informado\n"
+                "**Filtros:** Nenhum filtro adicional\n"
+                "**Campos:** todos os disponíveis\n\n"
+                "Posso gerar este relatório para você? "
+                "(resposta do LLM em modo fake — responda 'sim' para seguir)"
+            )
+        )
 
 
 class GenplatProvider:
