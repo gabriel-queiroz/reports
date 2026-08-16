@@ -143,7 +143,7 @@ Campos de controle, datas e flags técnicas.
 
 **Local**: `main.fintech_finance.ifood_benefits_recharges`
 
-**Descrição**: Recargas de benefícios do iFood Benefits. Uma linha por transação individual de recarga.
+**Descrição**: Recargas de benefícios do iFood Benefits. Esta tabela é a **mesclagem do pedido de recarga com os itens desse pedido** — pedido e item convivem na mesma linha.
 
 **Volume**: ~93M registros | **Última atualização**: 2026-07-22
 
@@ -156,6 +156,19 @@ Campos de controle, datas e flags técnicas.
 **Filtros padrão**: nenhum — esta tabela **não tem** `deleted` nem `test` (confirmado). Filtrar `r.deleted = false` aqui quebra a query.
 
 **Relacionamentos**: `employee_id` → `employee.id` · `company_group.id` → `receivable_assets.company_group_id`
+
+**Granularidade — dois níveis na mesma linha**: uma linha = **um item** (`order_item_id`). Um
+pedido de recarga (`order_id`) ocupa tantas linhas quantos forem seus itens. Escolha o nível
+pela pergunta:
+
+| A pergunta é sobre… | Use |
+|---|---|
+| **a recarga** (o pedido): quantas recargas, quando foram pedidas, como foram pagas, situação do pedido | `order_id`, `order_status` e os campos de **`order_info.*`** |
+| **o detalhe da recarga** (o item): valor, cashback, produto, colaborador que recebeu, situação do item | `order_item_id`, `order_item_status`, `amount`, `cashback_amount`, `product_key`, `employee_id` e os campos de **`order_item_info.*`** |
+
+⚠️ Campo do nível do pedido **se repete** em todas as linhas do mesmo `order_id`. Por isso, ao
+contar ou agrupar recargas, use `COUNT(DISTINCT r.order_id)` — `COUNT(*)` conta itens, não
+recargas, e infla o número. Para contar itens, `COUNT(*)` está correto.
 
 ### Colunas Principais
 
