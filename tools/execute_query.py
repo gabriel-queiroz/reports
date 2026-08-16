@@ -16,10 +16,7 @@ from domain.agents.reports_b2b.guardrails import (
     sanitize_question,
     validate_group_id,
 )
-from domain.agents.reports_b2b.sql_guard import (
-    MAX_REPORT_ROWS,
-    QueryNotAllowedError,
-)
+from domain.agents.reports_b2b.sql_guard import QueryNotAllowedError
 from domain.core.ioc import get_logger
 from domain.infra.genplat.genplat_provider import GenplatProvider
 
@@ -159,13 +156,8 @@ async def execute_query(
         return json.dumps(
             {
                 "status": "success",
-                "message": (
-                    "Report generation requested successfully. "
-                    f"O relatório traz no máximo {MAX_REPORT_ROWS} linhas — "
-                    "avise o usuário disso ao entregar."
-                ),
+                "message": "Report generation requested successfully.",
                 "report_id": report_id,
-                "row_limit": MAX_REPORT_ROWS,
                 "result": result,
             },
             ensure_ascii=False,

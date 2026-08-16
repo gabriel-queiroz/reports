@@ -71,7 +71,8 @@ ser corrigido depois.
    selecione um STRUCT inteiro — acesse o campo aninhado com ponto
    (ex.: `company_group.name AS nome_grupo_empresa`).
 
-9. **LIMIT.** Inclua `LIMIT {max_rows}` ao final.
+9. **LIMIT.** **Não** inclua `LIMIT` — o relatório traz o recorte inteiro. Só use `LIMIT`
+   quando o próprio usuário pedir um recorte de tamanho fixo (ex.: "as 10 maiores").
 
 10. **MULTI-TENANT (OBRIGATÓRIO EM 100% DAS QUERIES).**
    {restricao_group_id}
@@ -99,7 +100,6 @@ ser corrigido depois.
    WHERE e.deleted = false
      AND c.company_group_id = '{group_id}'
    GROUP BY c.company_name, c.company_group_id
-   LIMIT 100
    ```
 
    Exemplo com coluna direta:
@@ -109,7 +109,6 @@ ser corrigido depois.
    FROM main.ifood_benf_transaction_service.financial_account fa
    WHERE fa.deleted = false
      AND fa.group_id = '{group_id}'
-   LIMIT 100
    ```
 
 11. **COLUNA `company_group_id` NO SELECT (OBRIGATÓRIA).**

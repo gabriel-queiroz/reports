@@ -33,12 +33,10 @@ def sql_system_prompt(
     restricao_group_id: str,
     documentacao_tabelas: str,
     group_id: str,
-    max_rows: int = 1000,
 ) -> str:
     """Retorna o prompt de sistema para geração de SQL."""
     return _carregar("sql_system").format(
         documentacao_tabelas=documentacao_tabelas,
-        max_rows=max_rows,
         restricao_group_id=restricao_group_id,
         group_id=group_id,
     )

@@ -10,7 +10,6 @@ import pytest
 from domain.agents.reports_b2b.guardrails import InvalidGroupIdError
 from domain.agents.reports_b2b.sql_guard import (
     DIALECT,
-    MAX_REPORT_ROWS,
     OutputColumnError,
     SqlSyntaxError,
     StatementNotAllowedError,
@@ -218,17 +217,18 @@ def test_sql_devolvido_vem_da_ast_nao_da_string_do_llm():
     assert "\n" not in sql
 
 
-# ------------------------------------------------------ teto de linhas --
+# ----------------------------------------------------------------- LIMIT --
 
 
-def test_query_sem_limit_recebe_o_teto():
-    """O LIMIT era só uma instrução do prompt; quando o LLM esquecia, nada segurava."""
+def test_query_sem_limit_continua_sem_limit():
+    """Não há teto: o relatório traz o recorte inteiro e o guard não injeta nada."""
     sql = guard(f"SELECT c.company_group_id AS company_group_id FROM {COMPANIES} c")
 
-    assert sql.endswith(f"LIMIT {MAX_REPORT_ROWS}")
+    assert "LIMIT" not in sql.upper()
 
 
-def test_limit_menor_que_o_teto_e_respeitado():
+def test_limit_pedido_pelo_usuario_e_preservado():
+    """"as 10 maiores" continua sendo uma pergunta legítima."""
     sql = guard(
         f"SELECT c.company_group_id AS company_group_id FROM {COMPANIES} c LIMIT 10"
     )
@@ -236,13 +236,12 @@ def test_limit_menor_que_o_teto_e_respeitado():
     assert sql.endswith("LIMIT 10")
 
 
-def test_limit_maior_que_o_teto_e_reduzido():
+def test_limit_grande_nao_e_reduzido():
     sql = guard(
         f"SELECT c.company_group_id AS company_group_id FROM {COMPANIES} c LIMIT 50000"
     )
 
-    assert sql.endswith(f"LIMIT {MAX_REPORT_ROWS}")
-    assert "50000" not in sql
+    assert sql.endswith("LIMIT 50000")
 
 
 # ------------------------------------------------------------- allowlist --

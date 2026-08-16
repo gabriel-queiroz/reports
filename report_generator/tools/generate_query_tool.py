@@ -21,11 +21,7 @@ from domain.agents.reports_b2b.report_generator.prompts import (
     sql_user_prompt,
 )
 from domain.agents.reports_b2b.schema_extractor import get_all_tables_for_sql_generation
-from domain.agents.reports_b2b.sql_guard import (
-    MAX_REPORT_ROWS,
-    SqlGuardError,
-    guard_query,
-)
+from domain.agents.reports_b2b.sql_guard import SqlGuardError, guard_query
 from domain.core.ioc import get_logger
 from domain.infra.genplat.genplat_provider import GenplatProvider
 
@@ -185,7 +181,6 @@ async def _generate_sql_internal(
         restricao_group_id=group_id_restriction,
         documentacao_tabelas=tables_doc,
         group_id=group_id,
-        max_rows=MAX_REPORT_ROWS,
     )
     sql_user = sql_user_prompt(
         dominio=domain,

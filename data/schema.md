@@ -89,6 +89,11 @@ original tinha mais tabelas). **São chave literal para o código — não renum
 
 **Situação do colaborador**: use `status` (`ACTIVE` / `INACTIVE`). As colunas disponíveis para relatório são exatamente as listadas abaixo — nenhuma outra.
 
+> **Exibição vazia** = coluna que existe e é aceita pelo guard, mas **não é campo de relatório**:
+> serve a JOIN, a filtro ou é ruído técnico. Em `employee` isso vale para `status`, `deleted`,
+> `test` e `test_mode` — o agente pode filtrar por elas, mas não as oferece ao usuário como
+> coluna de saída.
+
 ### Categorias de Campos
 
 #### 🔑 Identificação do Colaborador (identidade única)
@@ -119,7 +124,7 @@ Campos que indicam o estado atual do colaborador no sistema.
 
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição | Uso | Valores |
 |--------|------|-------------|----------|-----------|-----|--------|
-| `status` | STRING | `situacao_colaborador` | Situação | Status do colaborador: **ACTIVE** (ativo) ou **INACTIVE** (desligado/removido). Use para filtrar ativos vs. inativos. | ✅ Essencial | ACTIVE, INACTIVE |
+| `status` | STRING | `situacao_colaborador` |  | Status do colaborador: **ACTIVE** (ativo) ou **INACTIVE** (desligado/removido). Use para filtrar ativos vs. inativos — **filtro apenas, não é campo de relatório**. | ✅ Filtro | ACTIVE, INACTIVE |
 | `company_id` | STRING | `id_empresa_colaborador` | Empresa | UUID da empresa/subsidiária onde o colaborador trabalha. **Obrigatório para filtros multi-tenant.** | ✅ Essencial | — |
 
 #### 🔍 Metadata e Auditoria
@@ -127,9 +132,9 @@ Campos de controle, datas e flags técnicas.
 
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição | Uso | Valores |
 |--------|------|-------------|----------|-----------|-----|--------|
-| `deleted` | BOOLEAN | `deletado_colaborador` | Deletado | Flag de soft delete. `true` = registro marcado como deletado (lógico, não físico). Sempre filtrar `deleted = false`. | ✅ Filtro | — |
-| `test` | BOOLEAN | `teste_colaborador` | Teste | Flag indicando dados de teste. `true` = registro de teste, `false` = produção. Filtrar conforme necessário. | Teste | — |
-| `test_mode` | STRING | `modo_teste` | Modo de Teste | Modo de teste técnico (valor informacional). Ignorar em relatórios de produção. | Ignorar | loadtest |
+| `deleted` | BOOLEAN | `deletado_colaborador` |  | Flag de soft delete. `true` = registro marcado como deletado (lógico, não físico). Sempre filtrar `deleted = false` — **filtro apenas, não é campo de relatório**. | ✅ Filtro | — |
+| `test` | BOOLEAN | `teste_colaborador` |  | Flag indicando dados de teste. `true` = registro de teste, `false` = produção. Filtrar conforme necessário — **filtro apenas, não é campo de relatório**. | Teste | — |
+| `test_mode` | STRING | `modo_teste` |  | Modo de teste técnico (valor informacional). Ignorar em relatórios de produção — **não é campo de relatório**. | Ignorar | loadtest |
 | `created_at` | STRING | `data_criacao_colaborador` | Data de Criação | Timestamp ISO 8601 de quando o colaborador foi criado no sistema. | Auditoria | — |
 
 ---
@@ -146,7 +151,7 @@ Campos de controle, datas e flags técnicas.
 
 **Multi-tenant**: STRUCT embutido — filtrar direto em `company_group.id`. JOIN com `companies` é opcional.
 
-**Partição obrigatória**: `update_date` (confirmado que existe, junto com `update_month`). Usar `update_month` (YYYY-MM) como filtro temporal legível. ⚠️ Falta confirmar o **tipo/formato** de `update_date` e qual das duas é de fato a coluna de partição.
+**Partição obrigatória**: `update_month` (YYYY-MM). É o filtro temporal desta tabela — comparar com `'2026-07'`, nunca com data completa.
 
 **Filtros padrão**: nenhum — esta tabela **não tem** `deleted` nem `test` (confirmado). Filtrar `r.deleted = false` aqui quebra a query.
 
@@ -165,7 +170,6 @@ Campos de controle, datas e flags técnicas.
 | `cashback_amount` | DOUBLE | `valor_cashback` | Cashback | Valor do cashback (R$) | — |
 | `employee_id` | STRING | `id_colaborador_recarga` | Colaborador | ID do funcionário | — |
 | `update_month` | STRING | `mes_atualizacao` | Mês de Atualização | Mês da atualização (YYYY-MM) | — |
-| `update_date` | STRING | `data_atualizacao_recarga` | Data de Atualização | **Coluna de partição** — filtrar sempre que possível. Tipo/formato a confirmar | — |
 | `schedule_date` | STRING | `data_agendamento` | Data de Agendamento | Data agendada (YYYY-MM-DD) | — |
 | `voucher_group` | STRING | `grupo_voucher` | Grupo do Voucher | Agrupamento de negócio do voucher: **PAT** ou **LIVRE** | PAT, LIVRE |
 | `release_month_11_10` | DATE | `mes_ciclo_11_10` | Mês do Ciclo (11→10) | Mês de negócio alternativo, ciclo do dia 11 ao dia 10, usado em cálculo financeiro | — |
@@ -207,6 +211,7 @@ Campos de controle, datas e flags técnicas.
 | `order_item_info.transaction_id` | STRING | `id_transacao_item` | Transação | ID da transação associada ao item | — |
 | `order_item_info.correlation_id` | STRING | `id_correlacao_item` | Correlação | ID de correlação para rastreio entre sistemas | — |
 | `order_item_info.employee_id` | STRING | `id_colaborador_item` | Colaborador (item) | UUID do colaborador dentro do struct. Espelha `employee_id` do topo | — |
+| `order_item_info.person_id` | STRING | `id_pessoa_item` | Pessoa (item) | UUID da entidade de pessoa associada ao colaborador | — |
 | `order_item_info.deleted` | BOOLEAN | `deletado_item` | Deletado (item) | Soft delete do item, **dentro do struct** | — |
 | `order_item_info.test` | BOOLEAN | `teste_item` | Teste (item) | Flag de teste do item, dentro do struct | — |
 
@@ -285,38 +290,16 @@ Campos de controle, datas e flags técnicas.
 
 | Coluna | Tipo | Alias PT-BR | Exibição | Descrição | Valores |
 |--------|------|-------------|----------|-----------|--------|
-| `company_id` | STRING | `id_empresa` | Empresa | UUID único | — |
+| `company_id` | STRING | `id_empresa` |  | UUID único. Chave de JOIN — não é campo de relatório | — |
 | `cnpj` | STRING | `cnpj` | CNPJ | CNPJ (14 dígitos) | — |
 | `company_name` | STRING | `nome_empresa` | Nome Fantasia | Nome fantasia | — |
-| `social_name` | STRING | `razao_social` | Razão Social | Razão social | — |
-| `company_group_id` | STRING | `company_group_id` | Grupo de Empresas | UUID do grupo corporativo | — |
-| `company_group_name` | STRING | `nome_grupo_empresa` | Nome do Grupo | Nome do grupo | — |
-| `card_delivery_type` | STRING | `tipo_entrega_cartao` | Tipo de Entrega | LOTE ou outro | PAP (individual), LOTE (em lote) |
-| `is_cardless` | BOOLEAN | `sem_cartao` | Sem Cartão | Operação digital | — |
-| `commercial_address` | STRUCT | `endereco_comercial` | Endereço Comercial | Endereço comercial. Nunca selecionar inteiro — usar os subcampos abaixo | — |
-| `origin` | STRING | `origem_cadastro` | Origem do Cadastro | Sistema que criou o registro: **SALESFORCE**, **SELFSALES** (entre outros) | SALESFORCE, SELFSALES (entre outros) |
-| `created_at` | STRING | `data_criacao_empresa` | Data de Criação | Timestamp ISO de criação do registro da empresa | — |
-| `updated_at` | STRING | `data_atualizacao_empresa` | Data de Atualização | Timestamp ISO da última atualização | — |
-| `deleted` | BOOLEAN | `deletado_empresa` | Deletado | Soft delete | — |
+| `company_group_id` | STRING | `company_group_id` |  | UUID do grupo corporativo. Filtro multi-tenant e coluna de saída obrigatória — não é campo de relatório | — |
+| `company_group_name` | STRING | `licenca` | Licença | Nome da licença (grupo corporativo) | — |
+| `deleted` | BOOLEAN | `deletado_empresa` |  | Soft delete. Usado no filtro padrão — não é campo de relatório | — |
 
-#### Campos de STRUCT (acessar com ponto — nunca selecionar o struct inteiro)
-
-| Coluna | Tipo | Alias PT-BR | Exibição | Descrição | Valores |
-|--------|------|-------------|----------|-----------|--------|
-| `commercial_address.street` | STRING | `logradouro` | Logradouro | Rua/avenida do endereço comercial | — |
-| `commercial_address.number` | STRING | `numero_endereco` | Número | Número do endereço | — |
-| `commercial_address.complement` | STRING | `complemento` | Complemento | Complemento do endereço | — |
-| `commercial_address.postal_code` | STRING | `cep` | CEP | CEP do endereço comercial | — |
-| `commercial_address.district` | STRING | `bairro` | Bairro | Bairro do endereço | — |
-| `commercial_address.city` | STRING | `cidade` | Cidade | Cidade do endereço | — |
-| `commercial_address.state` | STRING | `uf` | UF | Unidade federativa | — |
-| `commercial_address.country` | STRING | `pais` | País | País do endereço | — |
-| `commercial_address.postal_code_validation_error` | BOOLEAN | `erro_validacao_cep` | Erro de Validação do CEP | Indica CEP que falhou na validação | — |
-| `commercial_address.geo_loc_info.latitude` | DOUBLE | `latitude` | Latitude | Latitude do enriquecimento geográfico | — |
-| `commercial_address.geo_loc_info.longitude` | DOUBLE | `longitude` | Longitude | Longitude do enriquecimento geográfico | — |
-| `commercial_address.geo_loc_info.centroid_id` | STRING | `id_centroide` | Centroide | Identificador do centroide geográfico | — |
-| `commercial_address.geo_loc_info.microcentroid_id` | STRING | `id_microcentroide` | Microcentroide | Identificador do microcentroide geográfico | — |
-
+> **Exibição vazia** = a coluna existe e é aceita pelo guard, mas **não é campo de relatório**:
+> serve ao JOIN, ao filtro multi-tenant ou ao filtro padrão. O `list_fields` só oferece ao
+> usuário as linhas com Exibição preenchida.
 
 ---
 

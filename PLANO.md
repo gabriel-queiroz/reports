@@ -30,17 +30,17 @@ sem dependência de infra da empresa, e viajam junto com ele.
 |---|---|
 | ✅ | Repositório git com histórico por decisão; cache e lixo removidos |
 | ✅ | `schema.md` como fonte da verdade: domínio, multi-tenant, partição, filtros padrão e relacionamentos por tabela |
-| ✅ | Double check do catálogo contra o dump do Databricks; 13 divergências resolvidas |
+| ✅ | Double check do catálogo contra o dump do Databricks; 13 divergências resolvidas. O dump saiu do repositório — recuperável em `git show 4ba6b86:documentacao_tabelas_databricks.md` |
 | ✅ | Prompt parou de duplicar a estrutura das tabelas (−239 linhas no `sql_system.md`) |
 | ✅ | Prompt parou de ensinar campo inexistente (5 colunas de employee, `chargeback_employee`, structs não confirmados, `EXPIRED`, `c.test`, `r.deleted`) |
-| ✅ | Aliases únicos entre tabelas (51 renomeados); enums viraram coluna própria |
-| ✅ | Structs documentados por inteiro (`order_info`, `order_item_info`, `commercial_address`) |
+| ✅ | 51 aliases renomeados para reduzir colisão entre tabelas; enums viraram coluna própria. **Restam 8 aliases repetidos** — inofensivos: a resolução do guard é por alias de tabela no escopo, nunca global (`company_group_id` é repetido de propósito; quatro são de `chargeback_employee`, que está fora da allowlist) |
+| ✅ | Structs documentados por inteiro: `order_info` (19/19) e `order_item_info` (8/8) |
 | ✅ | Validador alinhado ao catálogo: filtro direto por `group_id` em chargeback e notas fiscais |
 | ✅ | `<pergunta>` marcada como dado, não instrução |
 | ✅ | Fases 1 a 5 (abaixo): guardrails de borda, guard de AST, validação de coluna, retry com realimentação e a limpeza |
 
-Resultado: prompt renderizado saiu de ~48,9k para ~44k caracteres, com muito mais conteúdo
-correto dentro. A validação por string virou AST alimentada pelo catálogo, com 143 testes —
+Resultado: o `sql_system` renderizado saiu de ~48,9k para ~42,8k caracteres, com muito mais
+conteúdo correto dentro. A validação por string virou AST alimentada pelo catálogo, com 143 testes —
 cada bug conhecido virou um caso de regressão.
 
 ---
@@ -146,11 +146,10 @@ vez quando a fase 5 tirar o último `except InvalidFieldsError`.
       com o `ExecuteQueryInput`.
 - [x] **`invoke` síncrono dentro de tool async:** `_generate_sql_internal` virou `async` e usa
       `ainvoke`.
-- [x] **`LIMIT` fixo:** virou `MAX_REPORT_ROWS`, **garantido pelo guard** (injeta quando falta,
-      reduz quando o LLM pede mais) em vez de só pedido no prompt. A tool devolve `row_limit` e
-      o prompt manda avisar o usuário do teto.
+- [x] ~~**`LIMIT` fixo:** virou `MAX_REPORT_ROWS`, garantido pelo guard.~~ **Revertido** — ver
+      "Decisões de produto" abaixo. Não há mais teto de linhas.
 - [x] **`list_fields`:** monta a lista do catálogo, por tabela, com a coluna *Exibição*. Saiu de
-      ~44k caracteres por chamada para ~0,7k (colaboradores). O `DOMAIN_MARKERS`, que esquecia
+      ~44k caracteres por chamada para 0,3k–1,5k conforme o domínio. O `DOMAIN_MARKERS`, que esquecia
       conta e transação financeira, deixou de existir — o mapa de domínios é um só.
 - [x] **Código morto:** `report_generator_agent.py`, `generate_sql_tool`, `GenerateSQLInput`,
       `InvalidFieldsError` e, com eles, o `sql_validator.py` inteiro. `GROUP_ID_FIELD_MAPPING`
@@ -159,9 +158,43 @@ vez quando a fase 5 tirar o último `except InvalidFieldsError`.
 
 ---
 
+## ✅ Decisões de produto (posteriores às fases 1–5)
+
+Mudanças de recorte, não de arquitetura. Todas no `schema.md` e nos prompts — o mecanismo
+(catálogo como fonte da verdade) não mudou.
+
+- [x] **Sem teto de linhas.** `MAX_REPORT_ROWS` e `_enforce_row_limit` removidos; o guard não
+      injeta nem reduz `LIMIT`. O que o LLM escrever a pedido do usuário ("as 10 maiores")
+      passa intacto. A tool não devolve mais `row_limit`, e o prompt não avisa de teto.
+      ⚠️ Sem a fase 7, um relatório de recargas varre ~93M linhas sem que ninguém aqui saiba.
+- [x] **Campos de `companies` reduzidos** a CNPJ, Nome Fantasia e Licença (`company_group_name`,
+      alias `licenca`). Razão social, endereço comercial e seus 13 subcampos, tipo de entrega,
+      sem cartão, origem e datas saíram do catálogo — hoje são `ColumnNotFoundError`.
+- [x] **Colunas de encanamento escondidas** via `Exibição` vazia: existem para o guard (JOIN,
+      filtro multi-tenant, filtro padrão) e não aparecem no `list_fields`. São
+      `companies.company_id`, `companies.company_group_id`, `companies.deleted` e, em
+      `employee`, `status`, `deleted`, `test` e `test_mode`.
+- [x] **`list_fields` ligada ao fluxo.** O `agente.md` mandava "liste os campos disponíveis" e
+      **nunca citava a ferramenta** — o modelo listava de memória e inventava campo
+      (`Cargo`, `Matrícula`, `Departamento`). Agora o passo 3 obriga a chamada, e uma regra
+      geral proíbe citar nome de campo que não veio dela, inclusive como exemplo.
+- [x] **`ifood_benefits_recharges.update_date` removida**; a partição declarada passou a ser
+      `update_month` (`YYYY-MM`). Ver pendência 1 do `DIVERGENCIAS.md`.
+- [x] **`order_item_info.person_id` adicionada** — o struct passou a bater 8/8 com o físico.
+
+Pendente e **não registrado em nenhum outro lugar**: `order_info.distributed` está como
+`TIMESTAMP` no catálogo e `string` no dump físico, e é oferecido como "filtro temporal fino".
+Se o formato não for ISO ordenável, a comparação de data devolve resultado errado em silêncio.
+
+---
+
 ## Fase 6 — Medir (golden set)
 
 - [ ] Conjunto de perguntas reais → SQL esperado, rodando os validadores em CI.
+- [ ] Caso mais barato e que já pegou bug real: **pergunta → lista de campos apresentada** deve
+      ser subconjunto do que a `list_fields` devolve. Foi assim que apareceu o agente
+      oferecendo `Cargo` e `Matrícula`, que não existem no catálogo — alucinação de
+      apresentação, que nenhum validador de SQL enxerga.
 
 Enquanto não houver `EXPLAIN` nem status de report voltando, **esta é a única forma de saber se
 uma mudança de prompt melhorou ou piorou a alucinação.**
